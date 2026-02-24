@@ -366,7 +366,7 @@ class MyCustomTask(BaseGFMSupervisedSingleSeqTask):
         val_df = pd.read_csv(os.path.join(data_dir, "dev.csv")) if os.path.exists(os.path.join(data_dir, "dev.csv")) else None
         test_df = pd.read_csv(os.path.join(data_dir, "test.csv"))
         
-        # Account for max_num_samples and max_sequence_length: limit samples and truncate sequences
+        # Data process: Account for self.max_num_samples and self.max_sequence_length
         train_dataset = [(seq, label, np.array([])) for seq, label in zip(train_df['sequence'], train_df['label'])]
         validation_dataset = [(seq, label, np.array([])) for seq, label in zip(val_df['sequence'], val_df['label'])] if val_df is not None else None
         test_dataset = [(seq, label, np.array([])) for seq, label in zip(test_df['sequence'], test_df['label'])]
@@ -396,7 +396,7 @@ class MyZeroShotTask(BaseGFMZeroShotSNVTask):
         data_dir = os.path.join(self.root_data_dir_path, self.get_task_name())
         test_df = pd.read_csv(os.path.join(data_dir, "test.csv"))
         
-        # Account for max_num_samples and max_sequence_length: limit samples and truncate sequences
+        # Data process: Account for self.max_num_samples and self.max_sequence_length
         test_dataset = [
             (var_seq, ref_seq, label, np.array([]))
             for var_seq, ref_seq, label in zip(test_df['variant_sequence'], test_df['reference_sequence'], test_df['label'])
@@ -411,40 +411,6 @@ class MyZeroShotTask(BaseGFMZeroShotSNVTask):
         return None
 ```
 
-### Data Directory Structure
-
-Place your task data in a subdirectory matching the task name:
-
-```
-<root_data_dir_path>/
-└── my_custom_task/
-    ├── train.csv
-    ├── dev.csv (optional)
-    └── test.csv
-```
-
-The task name returned by `get_task_name()` must exactly match this directory name.
-
-**CSV Format Example:**
-
-For supervised single-sequence tasks, CSV files should contain at least `sequence` and `label` columns:
-
-```csv
-sequence,label
-ATCGATCGATCGATCG,1
-GCTAGCTAGCTAGCTA,0
-TTAACCGGAATTCCGG,1
-```
-
-For variant effect tasks, include `ref_sequence`, `alt_sequence`, and `label` columns:
-
-```csv
-ref_sequence,alt_sequence,label
-ATCGATCGATCG,ATCGATCGATGG,1
-GCTAGCTAGCTA,GCTAGCTAGCCA,0
-```
-
----
 
 ## License
 
