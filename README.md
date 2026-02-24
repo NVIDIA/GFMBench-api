@@ -419,7 +419,7 @@ class MyZeroShotTask(BaseGFMZeroShotSNVTask):
 ## Citation
 @article{larey2026gfmbench,
   title={GFMBench-API: A Standardized Interface for Benchmarking Genomic Foundation Models},
-  author={Larey, Ariel and Dahan, Elay and Amit Bleiweiss, Amit Bleiweiss and Kellerman, Raizy and Leib, Guy and Nayshool, Omri and Ofer, Dan and Zinger, Tal and Dominissini, Dan and Rechavi, Gideon and others},
+  author={Ariel Larey, Elay Dahan, Amit Bleiweiss, Raizy Kellerman, Guy Leib, Omri Nayshool, Dan Ofer, Tal Zinger, Dan Dominissini,  Gideon Rechavi,  Nicole Bussola,  Simon Lee,  Shane O’Connell,  Dung Hoang,  Marissa Wirth,  Alexander W. Charney,  Yoli Shavit,  Nati Daniel},
   journal={bioRxiv},
   pages={2026--02},
   year={2026},
