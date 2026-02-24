@@ -1,154 +1,461 @@
-# __NVIDIA_OSS__ Standard Repo Template
+# GFMBench-API
 
-This README file is from the NVIDIA_OSS standard repo template of [PLC-OSS-Template](https://github.com/NVIDIA-GitHub-Management/PLC-OSS-Template?tab=readme-ov-file). It provides a list of files in the PLC-OSS-Template and guidelines on how to use (clone and customize) them.
+GFMBench-API is an extensible benchmarking suite for assessing genomic foundation models (GFMs) across a diverse set of downstream tasks, including classification, variant effect prediction, and zero-shot evaluation.
 
-**Upon completing the customization for the project repo, the repo admin should replace this README template with the project specific README file.**
+## Quick Start
 
-- Files (org-wide templates in the NVIDIA .github org repo; per-repo overrides allowed) in [PLC-OSS-Template](https://github.com/NVIDIA-GitHub-Management/PLC-OSS-Template?tab=readme-ov-file)
+### Installation
 
-   - Root 
-     - README.md skeleton (CTA + Quickstart + Support/Security/Governance links) 
-     - LICENSE (Apache 2.0 by default)
-        - For other licenses, see the [Confluence page](https://confluence.nvidia.com/pages/viewpage.action?pageId=788418816) for other licenses
-        - CLA.md file (delete if not using MIT or BSD licenses)
-     - CODE_OF_CONDUCT.md 
-     - SECURITY.md (vuln reporting path) 
-     - CONTRIBUTING.md (base; repo can add specifics)
-     - SUPPORT.md (Support levels/channels)
-     - GOVERNANCE.md (baseline; repo may extend)
-     - CITATION.md (for projects that need citation)
+1. Create a virtual environment (choose one option):
 
-   - .github/ 
-     - ISSUE_TEMPLATE/ (<https://docs.github.com/en/communities/using-templates-to-encourage-useful-issues-and-pull-requests/configuring-issue-templates-for-your-repository>)
-       - bug.yml, feature.yml, task.yml, config.yml 
-     - PULL_REQUEST_TEMPLATE.md (<https://docs.github.com/en/communities/using-templates-to-encourage-useful-issues-and-pull-requests/creating-a-pull-request-template-for-your-repository>)
-     - workflows/
-     - Note: workflow-templates/ for starter workflows should live in the org-level .github repo, not per-repo
+   **Option A: Using pip (venv)**
+   ```bash
+   python -m venv gfmbench_env
+   source gfmbench_env/bin/activate  # On Windows: gfmbench_env\Scripts\activate
+   ```
 
-   - Repo-specific (not org-template, maintained by the team)
-     - CODEOWNERS (place at .github/CODEOWNERS or repo root)
-     - CHANGELOG.md (or RELEASE.md) 
-     - ROADMAP.md 
-     - MAINTAINERS.md 
-     - NOTICE or THIRD_PARTY_NOTICES / THIRD_PARTY_LICENSES (dependency specific)
-     - Build/package files (CMake, pyproject, Dockerfile, etc.)
+   **Option B: Using conda**
+   ```bash
+   conda create -n gfmbench_env python=3.10
+   conda activate gfmbench_env
+   ```
 
-   - Recommended structure and hygiene
-     - docs/
-     - examples/
-     - tests/
-     - scripts/
-     - Container/dev env: Dockerfile, docker/, .devcontainer/ (optional)
-     - Build/package (language-specific):
-       - Python: pyproject.toml, setup.cfg/setup.py, requirements.txt, environment.yml
-       - C++: CMakeLists.txt, cmake/, vcpkg.json
-     - Repo hygiene: .gitignore, .gitattributes, .editorconfig, .pre-commit-config.yaml, .clang-format
+2. Install required Python dependencies:
+   ```bash
+   pip install -r requirements.txt
+   ```
 
+3. (Optional, GPU users) Check CUDA availability:
+   ```bash
+   python -c "import torch; print(torch.cuda.is_available())"
+   ```
 
-## Usage of [PLC-OSS-Template](https://github.com/NVIDIA-GitHub-Management/PLC-OSS-Template?tab=readme-ov-file) for NEW NVIDIA OSS repos
+4. (Optional, for DNABERT2 with flash attention):
+   ```bash
+   pip install flash-attn --no-build-isolation
+   ```
 
-1. Clone the [PLC-OSS-Template](https://github.com/NVIDIA-GitHub-Management/PLC-OSS-Template?tab=readme-ov-file)
-2. Find/replace all in the clone of `___PROJECT___` and `__PROJECT_NAME__` with the name of the specific project.
-3. Inspect all files to make sure all replacements work and update text as needed
+   Note: The requirements in `requirements.txt` are configured for running examples with DNABERT2 and DNABERT models.
+   For other models or algorithms, additional dependencies may be required and should be installed separately.
+---
 
+## What’s Included?
 
-**What you can reuse immediately**
-- CODE_OF_CONDUCT.md
-- SECURITY.md
-- CONTRIBUTING.md (base)
-- .github/ISSUE_TEMPLATE/.yml (bug/feature/task + config.yml)
-- .github/PULL_REQUEST_TEMPLATE.md
-- Reusable workflows 
+GFMBench-API provides:
 
-**What you must customize per repo**
-- README.md: copy the skeleton and fill in product-specific details (Quickstart, Requirements, Usage, Support level, links)
-- LICENSE: check file is correct, update year, consult Confluence for alternatives https://confluence.nvidia.com/pages/viewpage.action?pageId=788418816, add CLA.md only if your license/process requires it
-- CODEOWNERS: replace <TEAM> with your GitHub team handle(s). Place at .github/CODEOWNERS (or repo root)
-- MAINTAINERS.md: list maintainers names/roles, escalation path
-- CHANGELOG.md (or RELEASE.md): track releases/changes
-- SUPPORT.md: Update for your project
-- ROADMAP.md (optional): upcoming milestones
-- NOTICE / THIRD_PARTY_NOTICES (if you ship third‑party content)
-- Build/package files (CMake/pyproject/Dockerfile/etc.), tests/, docs/, examples/, scripts/ as appropriate
-- Workflows: Edit if you need custom behavior 
+- A **core API package** for unified GFM evaluation (`gfmbench_api/`).
+- A **suite of standard benchmark tasks** covering supervised and zero-shot scenarios.
+- Consistent interfaces for models and tasks, enabling both out-of-the-box use and customized evaluation pipelines.
+- Example scripts and templates (`usage_examples/`) to get started quickly or for rapid prototyping.
 
+---
 
-4. Change git origin to point to new repo and push
-5. Remove the line break below and everything above it
+## Repository Organization
 
-## Usage for existing NVIDIA OSS repos
-
-1. Follow the steps above, but add the files to your existing repo and merge
-
-<!-- REMOVE THE LINE BELOW AND EVERYTHING ABOVE -->
------------------------------------------
-# [Project Title]
-One-sentence value proposition for users. Who is it for, and why it matters. 
-
-# Overview
-What the project does? Why the project is useful?
-Provide a brief overview, highlighting key features or problem-solving capabilities.
-
-# Getting Started
-Guide users on how they can get started with the project. This should include basic installation step, quick-start examples 
-```bash
-# Option A: Package manager (pip/conda/npm/etc.)
-<copy-paste install>
-
-# Option B: Container
-docker run <image> <args>
-
-# Verify (hello world)
-<one-liner or ~10-line example>
 ```
-# Requirements
-Include a list of pre-requisites. 
-- OS/Arch: <summary or link to full matrix>
-- Runtime/Compiler: <versions>
-- GPU/Drivers (if applicable): CUDA <ver>, driver <ver>, etc.
-
-# Usage
-```bash
-# Minimal runnable snippet (≤20 lines)
-<code>
+gfmbench_api_rep/
+├── gfmbench_api/              # Main API package
+│   ├── benchmark_report/      # CSV report utilities
+│   ├── metrics/               # Built-in metrics (AUROC, AUPRC, etc.)
+│   ├── tasks/                 # Task definitions
+│   │   ├── base/              # Base task/model classes
+│   │   └── concrete/          # 20+ ready-to-use tasks
+│   └── utils/                 # Misc utilities (data I/O, download helpers)
+├── usage_examples/            # Getting started scripts and toy models
+│   ├── run_benchmark.py
+│   ├── trainers/
+│   └── sanity_models/
+├── logs/                      # Logs (autocreated)
+└── requirements.txt
 ```
-- More examples/tutorials: <link>
-- API reference: <link>
 
-# Performance (Optional)
-Summary of benchmarks; link to detailed results and hardware used.
+---
 
-## Releases & Roadmap 
-- Releases/Changelog: <link>
-- (Optional) Next milestones or link to `ROADMAP.md`.
+## Supported Benchmarks & Tasks
+
+GFMBench-API supports evaluation on **20 unique tasks**, grouped as:
+
+### Supervised Classification & Variant Prediction
+
+| Task Class                       | Description                             |
+| --------------------------------- | --------------------------------------- |
+| GuePromoterAllTask                | Binary classification of promoter vs non-promoter DNA sequences. |
+| GueSpliceSiteTask                 | Three-class classification of splice sites as donor, acceptor, or non-splice. |
+| GueTranscriptionFactorTask        | Binary classification of transcription factor binding sites from ChIP-seq data. |
+| VariantBenchmarksCodingTask          | Binary classification of coding variants as benign or pathogenic. |
+| VariantBenchmarksNonCodingTask       | Binary classification of non-coding variants as benign or pathogenic. |
+| VariantBenchmarksExpressionTask      | Binary classification of variants affecting gene expression. |
+| VariantBenchmarksCommonVsRareTask    | Binary classification distinguishing common variants from synthetic rare controls. |
+| VariantBenchmarksMEQTLTask           | Binary classification of variants affecting DNA methylation rates. |
+| VariantBenchmarksSQTLTask            | Binary classification of variants affecting alternative splicing. |
+| LRBCausalEqtlTask                    | Binary classification of variants causally influencing gene expression with tissue context. |
+
+### Zero-Shot Variant Effect Prediction
+
+| Task Class                          | Description                                |
+| -------------------------------------|--------------------------------------------|
+| VepevalClinvarTask                   | Zero-shot pathogenicity prediction for ClinVar SNVs using embedding-distance scoring. |
+| IndelClinvarTask                     | Zero-shot pathogenicity prediction for ClinVar insertions and deletions. |
+| BendVEPExpression                    | Zero-shot prediction of expression effects for non-coding variants. |
+| BendVEPDisease                       | Zero-shot prediction of disease effects for non-coding variants. |
+| SonglabClinvarTask                | Zero-shot pathogenicity prediction for ClinVar SNVs using likelihood-based scoring. |
+| BRCA1Task                         | Zero-shot prediction of functional impact for BRCA1 variants (LOF, intermediate, functional). |
+| TraitGymComplexTask               | Zero-shot prediction of complex trait-associated variants. |
+| TraitGymMendelianTask             | Zero-shot prediction of Mendelian disease-associated variants. |
+| LrbVariantEffectPathogenicOmimTask   | Zero-shot prediction of pathogenic variants associated with Mendelian diseases. |
+| LoleveCausalEqtlTask                 | Zero-shot prediction of causal expression-modulating variants (indels) in promoters. |
+
+---
+
+## How Model & Task Interfaces Work
+
+### Task API
+
+All task classes expose a consistent interface (see `gfmbench_api/tasks/base/`):
+
+- `get_task_name()`
+- `get_task_attributes()` &mdash; metadata (e.g. number of labels, dataset splits)
+- `get_finetune_dataset()`
+- `eval_test_set(model)`
+- `eval_validation_set(model)`
+- `eval_cross_validation_fold(model, train_indices)`
+
+### Model Integration
+
+Simply implement the methods below in your model class; inheritance is **not** required. The API uses duck typing and will only call methods needed by the specific tasks you run.
+
+| Method Signature                                                                     | Description                            |
+|:-------------------------------------------------------------------------------------|:------------------------------------------|
+| `infer_sequence_to_labels_probs(sequences, ...)`                                     | Takes a list of DNA sequences and returns probabilities for each class label for classification tasks. |
+| `infer_variant_ref_sequences_to_labels_probs(variant_sequences, ref_sequences, ...)`  | Takes lists of variant and reference sequences and returns probabilities for variant effect classification tasks. |
+| `infer_sequence_to_sequence(sequences, ...)`                                         | Takes a list of DNA sequences and returns per-nucleotide probabilities, per-position embeddings, and a single sequence-level embedding. |
+| `sequence_pos_to_prob_pos(sequences, pos)`                                           | Takes a list of DNA sequences and a position index, returns the corresponding output position indices accounting for tokenization differences. |
+| `infer_masked_sequence_to_token_probs(sequences, variant_pos, variant_letters, reference_letters, ...)` | Takes sequences and masks the variant position, returns probabilities for the variant and reference nucleotides at the masked position. |
+
+- Any not-implemented methods can simply return `None` and metrics depending on them will be skipped.
+- See `gfmbench_api/tasks/base/base_gfm_model.py` for detailed docstrings.
+
+---
+
+## Example: Running Benchmarks
+
+### The `usage_examples/run_benchmark.py` script
+
+This reference script demonstrates a standard workflow:
+- Loading a model (built-in or your own)
+- Running a configurable set of tasks
+- Supervised fine-tuning or zero-shot evaluation
+- Auto-generating benchmark CSVs
+
+#### Common CLI Arguments
+
+| Argument             | Type    | Default | Notes                                             |
+|----------------------|---------|---------|---------------------------------------------------|
+| `--model`            | str     | DNABERT2| Model string key (see `MODEL_REGISTRY`)           |
+| `--checkpoint_path`  | str     | None    | Path to model checkpoint                          |
+| `--mlm_head_path`    | str     | None    | Optional: path to MLM head checkpoint             |
+| `--report_algo_name` | str     | temp    | Column name for this model in benchmark CSV       |
+| `--csv_path`         | str     | ...     | Where benchmark report is saved                   |
+| `--linear_prob`      | flag    | False   | If set: train only projection layer               |
+| `--epochs`           | int     | 3       | Num epochs for fine-tuning                        |
+| `--disable_safe_model_call` | flag | False | Bypass try/except if set                          |
+
+#### Key Variables to Adjust in `run_benchmark.py`
+
+- **Root data directory**  
+  ⚠️ Update around line 164:  
+  ```python
+  root_data_dir_path = "/path/to/your/data/"
+  ```
+- **Sanity check mode** (100-sample subsets)  
+  ```python
+  sanity_check_mode = True  # Set to False for full eval
+  ```
+- **Task configuration**  
+  Edit parameters like `max_sequence_length`, `batch_size`.
+- **Training parameters**  
+  Change `num_epochs`, `learning_rate`, etc. in the training_params dict.
+- **Task list**  
+  Edit/add the tasks in the `tasks = [...]` list.
+- **Model registry**  
+  Add your models to the `MODEL_REGISTRY` dict.
+
+#### Example usage
+
+Default (no checkpoint):  
+```bash
+python usage_examples/run_benchmark.py \
+    --model DNABERT2 \
+    --report_algo_name dna_bert2_baseline \
+    --csv_path results/baseline_results.csv
+```
+
+With a custom model checkpoint:  
+```bash
+python usage_examples/run_benchmark.py \
+    --model DNABERT2 \
+    --checkpoint_path /path/to/model.pt \
+    --report_algo_name my_custom_model \
+    --csv_path results/my_results.csv \
+    --epochs 5
+```
+
+Linear probe (freeze backbone, train only projection):  
+```bash
+python usage_examples/run_benchmark.py \
+    --model DNABERT2 \
+    --linear_prob \
+    --report_algo_name linear_probe \
+    --csv_path results/linear_probe_results.csv
+```
+
+---
+
+## Data Preparation
+
+### Root Data Directory
+
+All task data is stored under a single root directory (customize the path!):
+
+```python
+root_data_dir_path = "/path/to/your/data/"
+```
+
+### Task Data Structure
+
+Each task creates a subdirectory, e.g.:
+
+```
+<root_data_dir_path>/
+├── gue_promoter_all/
+│   ├── train.csv
+│   ├── dev.csv
+│   └── test.csv
+├── clinvar_vepeval/
+│   └── ...
+└── ...
+```
+
+- Task subdirectory names correspond to class names.
+- If files are missing, they will be automatically downloaded on first use.
+
+#### Dataset Format
+
+| Task Type        | Key columns                          | Example          |
+|------------------|--------------------------------------|------------------|
+| Classification   | `sequence`, `label`                  | `ATCCGA...`, 1   |
+| Variant effect   | `ref_sequence`, `alt_sequence`, label| `A...T...`, 0    |
+
+---
+
+## Benchmark Output
+
+Results are auto-saved in a single CSV with this schema:
+
+| task             | metric       | model1 | model2 | ... |
+|------------------|-------------|--------|--------|-----|
+| gue_promoter_all | accuracy    | 0.85   | 0.82   | ... |
+| gue_promoter_all | auroc       | 0.91   | 0.88   | ... |
+| ...              | ...         | ...    | ...    | ... |
+
+- Each (task, metric) is a row.
+- Each model name (as passed to `--report_algo_name`) is a column.
+- If a result is missing, its cell is `NO_RESULTS`.
+- Incremental saving ensures safe restarts/interruption recovery.
+
+Logs are written to `logs/` for all major steps (run progress, model errors, fine-tune loss curves, auto-downloading messages, etc).
+
+---
+
+## Customizing
+
+### Example: Minimal Custom Pipeline
+
+```python
+from gfmbench_api.tasks.concrete.gue_promoter_all_task import GuePromoterAllTask
+from gfmbench_api.benchmark_report import BenchmarkReport
+
+task = GuePromoterAllTask(
+    root_data_dir_path="/your/data/path",
+    task_config={"max_sequence_length": 2500, "batch_size": 16},
+)
+
+my_model = MyCustomModel(device="cuda")  # Implements the required inference methods
+
+# Optionally, supervised fine-tuning:
+if task.get_task_attributes()["has_finetuning_data"]:
+    dataset = task.get_finetune_dataset()
+    # ... Your custom training code ...
+    # After fine-tuning, wrap model with projection layer for classification (my_model = wrapped_model)
+
+# Evaluate
+my_model.eval()
+results = task.eval_test_set(my_model)
+print(results)
+
+# Save results
+report = BenchmarkReport(csv_path="results.csv")
+report.add_scores("gue_promoter_all", "my_model", results)
+report.save_csv()
+```
+
+---
+
+## Adding Tasks
+
+To add a new concrete task, inherit from the appropriate base class based on your task type and implement the required methods.
+
+**Note:** If your task has unique functionality that doesn't fit the standard task types, you can inherit directly from `BaseGFMTask` and implement all required methods from scratch.
+
+### Task Type Hierarchy
+
+Choose the appropriate base class based on your task:
+
+- **Supervised Single-Sequence Classification**: Inherit from `BaseGFMSupervisedSingleSeqTask`
+  - For tasks with single DNA sequences and categorical labels (e.g., promoter prediction, splice site detection)
   
-# Contribution Guidelines
-- Start here: `CONTRIBUTING.md`
-- Code of Conduct: `CODE_OF_CONDUCT.md`
-- Development quickstart (build/test):
-```bash
-<clone> && <deps> && <build/test>
+- **Supervised Variant Effect Prediction**: Inherit from `BaseGFMSupervisedVariantEffectTask`
+  - For tasks with paired reference/variant sequences and categorical labels (e.g., pathogenic variant classification)
+  
+- **Zero-Shot SNV Variant Effect**: Inherit from `BaseGFMZeroShotSNVTask`
+  - For zero-shot evaluation of single-nucleotide variants (SNVs) with equal-length reference and variant sequences
+  
+- **Zero-Shot General Indel**: Inherit from `BaseGFMZeroShotGeneralIndelTask`
+  - For zero-shot evaluation of insertions/deletions with variable-length sequences
+
+### Required Methods to Implement
+
+All concrete tasks must implement:
+
+1. **`get_task_name() -> str`**: Return the task name (must match the data directory name)
+2. **`_get_default_max_seq_len() -> int`**: Return the default maximum sequence length
+3. **`_create_datasets()` or `_create_test_dataset()`**: Create and return datasets
+   - Supervised tasks: Return `Tuple[Optional[Dataset], Optional[Dataset], Dataset]` (train, validation, test)
+   - Zero-shot tasks: Return `Dataset` (test only)
+   - **Important:** When creating datasets, you must account for:
+     - `self.max_sequence_length`: Truncate sequences if they exceed this length (use `truncate_sequence_from_ends()` from `gfmbench_api.utils.preprocutils`)
+     - `self.max_num_samples`: Limit the number of samples per split if specified (for sanity testing with smaller datasets)
+4. **`get_conditional_input_meta_data_frame() -> Optional[pd.DataFrame]`**: Return metadata DataFrame if task uses conditional inputs, otherwise return `None`
+
+Additional methods for supervised tasks:
+
+5. **`_get_num_labels() -> int`**: Return the number of classification labels
+
+### Example: Supervised Single-Sequence Task
+
+```python
+from gfmbench_api.tasks.base.base_gfm_supervised_single_seq_task import BaseGFMSupervisedSingleSeqTask
+import os
+import pandas as pd
+import torch
+import numpy as np
+
+class MyCustomTask(BaseGFMSupervisedSingleSeqTask):
+    def get_task_name(self) -> str:
+        return "my_custom_task"
+    
+    def _get_default_max_seq_len(self) -> int:
+        return 512
+    
+    def _get_num_labels(self) -> int:
+        return 2  # Binary classification
+    
+    def _create_datasets(self):
+        data_dir = os.path.join(self.root_data_dir_path, self.get_task_name())
+        train_df = pd.read_csv(os.path.join(data_dir, "train.csv"))
+        val_df = pd.read_csv(os.path.join(data_dir, "dev.csv")) if os.path.exists(os.path.join(data_dir, "dev.csv")) else None
+        test_df = pd.read_csv(os.path.join(data_dir, "test.csv"))
+        
+        # Account for max_num_samples and max_sequence_length: limit samples and truncate sequences
+        train_dataset = [(seq, label, np.array([])) for seq, label in zip(train_df['sequence'], train_df['label'])]
+        validation_dataset = [(seq, label, np.array([])) for seq, label in zip(val_df['sequence'], val_df['label'])] if val_df is not None else None
+        test_dataset = [(seq, label, np.array([])) for seq, label in zip(test_df['sequence'], test_df['label'])]
+        
+        return train_dataset, validation_dataset, test_dataset
+    
+    def get_conditional_input_meta_data_frame(self):
+        return None
 ```
-## Governance & Maintainers
-- Governance: `GOVERNANCE.md`
-- Maintainers: <team/handles>
-- Labeling/triage policy: <link>
 
-## Security
-- Vulnerability disclosure: `SECURITY.md`
-- Do not file public issues for security reports.
+### Example: Zero-Shot SNV Task
 
-## Support
-- Level: <Experimental | Maintained | Stable>
-- How to get help: Issues/Discussions/<channel link>
-- Response expectations (if any).
+```python
+from gfmbench_api.tasks.base.base_gfm_zeroshot_snv_task import BaseGFMZeroShotSNVTask
+import os
+import pandas as pd
+import numpy as np
 
-# Community
-Provide the channel for community communications.
+class MyZeroShotTask(BaseGFMZeroShotSNVTask):
+    def get_task_name(self) -> str:
+        return "my_zero_shot_task"
+    
+    def _get_default_max_seq_len(self) -> int:
+        return 1024
+    
+    def _create_test_dataset(self):
+        data_dir = os.path.join(self.root_data_dir_path, self.get_task_name())
+        test_df = pd.read_csv(os.path.join(data_dir, "test.csv"))
+        
+        # Account for max_num_samples and max_sequence_length: limit samples and truncate sequences
+        test_dataset = [
+            (var_seq, ref_seq, label, np.array([]))
+            for var_seq, ref_seq, label in zip(test_df['variant_sequence'], test_df['reference_sequence'], test_df['label'])
+        ]
+        
+        return test_dataset
+    
+    def _get_variant_position_in_sequence(self) -> int:
+        return self.max_sequence_length // 2
+    
+    def get_conditional_input_meta_data_frame(self):
+        return None
+```
 
-# References
-Provide a list of related references
+### Data Directory Structure
 
-# License
-This project is licensed under the [NAME HERE] License - see the LICENSE.md file for details
-- License: <link>
+Place your task data in a subdirectory matching the task name:
+
+```
+<root_data_dir_path>/
+└── my_custom_task/
+    ├── train.csv
+    ├── dev.csv (optional)
+    └── test.csv
+```
+
+The task name returned by `get_task_name()` must exactly match this directory name.
+
+**CSV Format Example:**
+
+For supervised single-sequence tasks, CSV files should contain at least `sequence` and `label` columns:
+
+```csv
+sequence,label
+ATCGATCGATCGATCG,1
+GCTAGCTAGCTAGCTA,0
+TTAACCGGAATTCCGG,1
+```
+
+For variant effect tasks, include `ref_sequence`, `alt_sequence`, and `label` columns:
+
+```csv
+ref_sequence,alt_sequence,label
+ATCGATCGATCG,ATCGATCGATGG,1
+GCTAGCTAGCTA,GCTAGCTAGCCA,0
+```
+
+---
+
+## License
+
+[Please add license information here if required.]
+
+## Citation
+@article{larey2026gfmbench,
+  title={GFMBench-API: A Standardized Interface for Benchmarking Genomic Foundation Models},
+  author={Larey, Ariel and Dahan, Elay and Amit Bleiweiss, Amit Bleiweiss and Kellerman, Raizy and Leib, Guy and Nayshool, Omri and Ofer, Dan and Zinger, Tal and Dominissini, Dan and Rechavi, Gideon and others},
+  journal={bioRxiv},
+  pages={2026--02},
+  year={2026},
+  publisher={Cold Spring Harbor Laboratory}
+}
