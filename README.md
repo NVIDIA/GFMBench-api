@@ -412,6 +412,13 @@ class MyZeroShotTask(BaseGFMZeroShotSNVTask):
 ```
 
 
+## NOTICE
+
+This project may download additional third-party software projects. Review the license terms of these components before use.
+
+**Third-party components:**
+- LicenseRef-UCSC-Genome-Browser, see https://genome.ucsc.edu/license/
+
 ## License
 
 [Please add license information here if required.]
