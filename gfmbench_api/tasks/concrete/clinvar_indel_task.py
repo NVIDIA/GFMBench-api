@@ -15,6 +15,7 @@ import torch
 
 from gfmbench_api.tasks.base.base_gfm_zeroshot_general_indel_task import BaseGFMZeroShotGeneralIndelTask
 from gfmbench_api.utils.fileutils import ensure_reference_genome
+from gfmbench_api.utils.preprocutils import pad_sequence_centered_variant
 
 # ClinVar annotation mappings
 REVIEW_STATUS_TO_GOLD_STARS = {
@@ -270,53 +271,64 @@ class IndelClinvarTask(BaseGFMZeroShotGeneralIndelTask):
         # Process per chromosome for efficiency
         for chrom, group in df.groupby("chrom"):
             try:
-                chrom_seq = str(genome[chrom][:]).upper()
+                chrom_obj = genome[chrom]
             except KeyError:
                 logging.warning(f"Chromosome {chrom} not in reference, skipping {len(group)} variants")
                 skipped += len(group)
                 continue
 
-            chrom_len = len(chrom_seq)
-
             for _, row in group.iterrows():
                 pos = int(row["pos"])  # 1-based VCF position
-                ref_allele = row["ref"]
-                alt_allele = row["alt"]
+                ref_allele = str(row["ref"]).upper()
+                alt_allele = str(row["alt"]).upper()
                 label = int(row["label"])
 
                 # Convert to 0-based
                 pos_0 = pos - 1
 
-                # Compute window centered on variant
-                window_start = max(0, pos_0 - half_window)
-                window_end = min(chrom_len, window_start + self.max_sequence_length)
+                # Extract reference sequence using padding function (handles chromosome boundaries)
+                try:
+                    ref_seq = pad_sequence_centered_variant(
+                        chromosome=chrom_obj,
+                        variant_pos_0based=pos_0,
+                        max_sequence_length=self.max_sequence_length,
+                        variant_pos_in_seq=half_window
+                    )
+                except Exception as e:
+                    logging.debug(f"Error extracting sequence for {chrom}:{pos}. {str(e)}. Skipping.")
+                    skipped += 1
+                    continue
 
-                # Adjust if we hit chromosome boundary
-                if window_end - window_start < self.max_sequence_length:
-                    window_start = max(0, window_end - self.max_sequence_length)
+                # Validate sequence length
+                if len(ref_seq) != self.max_sequence_length:
+                    skipped += 1
+                    continue
 
-                ref_context = chrom_seq[window_start:window_end]
+                # Variant position in window should be at half_window (center)
+                variant_pos_in_window = half_window
+                
+                # Check if padding character is at variant position (shouldn't happen, but safety check)
+                if variant_pos_in_window < len(ref_seq) and 'P' in ref_seq[variant_pos_in_window:variant_pos_in_window + len(ref_allele)]:
+                    logging.debug(f"Variant position at {chrom}:{pos} falls in padding region. Skipping.")
+                    skipped += 1
+                    continue
 
                 # Validate reference allele matches genome
-                variant_pos_in_window = pos_0 - window_start
-                extracted_ref = ref_context[variant_pos_in_window:variant_pos_in_window + len(ref_allele)]
+                extracted_ref = ref_seq[variant_pos_in_window:variant_pos_in_window + len(ref_allele)]
 
                 if extracted_ref != ref_allele:
                     logging.debug(f"Ref mismatch at {chrom}:{pos}")
                     skipped += 1
                     continue
 
-                # ref_seq: the context as extracted (contains ref allele)
-                ref_seq = ref_context
-
                 # alt_seq: context with ref allele replaced by alt allele
                 # This naturally handles length changes:
                 # - Deletion: len(alt) < len(ref) -> alt_seq shorter
                 # - Insertion: len(alt) > len(ref) -> alt_seq longer
                 alt_seq = (
-                    ref_context[:variant_pos_in_window] +
+                    ref_seq[:variant_pos_in_window] +
                     alt_allele +
-                    ref_context[variant_pos_in_window + len(ref_allele):]
+                    ref_seq[variant_pos_in_window + len(ref_allele):]
                 )
 
                 reference_sequences.append(ref_seq)

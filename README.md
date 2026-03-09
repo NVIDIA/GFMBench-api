@@ -246,6 +246,22 @@ Each task creates a subdirectory, e.g.:
 | Classification   | `sequence`, `label`                  | `ATCCGA...`, 1   |
 | Variant effect   | `ref_sequence`, `alt_sequence`, label| `A...T...`, 0    |
 
+##### Sequence Symbol Conventions
+
+GFMBench-API uses the following standard symbols for DNA sequences in datasets:
+
+| Symbol | Meaning | Usage |
+|--------|---------|-------|
+| `A`, `T`, `C`, `G` | Standard DNA nucleotides | Used to represent the four DNA bases (adenine, thymine, cytosine, guanine) |
+| `N` | Unknown/ambiguous nucleotide | Used when the nucleotide at a position is unknown or ambiguous |
+| `P` | Padding character | Used to pad sequences when extracting windows near chromosome boundaries |
+
+**Notes:**
+- All sequences are case-insensitive (automatically converted to uppercase)
+- The `P` padding character should be added when handling boundary cases
+- Unknown nucleotides (`N`) may appear in reference genome data or when sequence information is incomplete
+- When creating custom tasks, ensure your sequences use only these accepted symbols
+
 ---
 
 ## Benchmark Output

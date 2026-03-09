@@ -11,6 +11,7 @@ from torch.utils.data import Dataset
 
 from gfmbench_api.tasks.base.base_gfm_zeroshot_snv_task import BaseGFMZeroShotSNVTask
 from gfmbench_api.utils.fileutils import ensure_reference_genome
+from gfmbench_api.utils.preprocutils import pad_sequence_centered_variant
 
 
 class SonglabClinvarTask(BaseGFMZeroShotSNVTask):
@@ -59,7 +60,7 @@ class SonglabClinvarTask(BaseGFMZeroShotSNVTask):
     def _get_default_max_seq_len(self) -> int:
         """Return the task's default maximum sequence length.
         """
-        return 5994
+        return 1048576
 
     def _create_test_dataset(self) -> Dataset:
         """
@@ -137,7 +138,7 @@ class SonglabClinvarTask(BaseGFMZeroShotSNVTask):
         # Process per chromosome to avoid repeated pyfaidx calls
         for chrom, group in df.groupby('chrom'):
             try:
-                chrom_seq = str(genome[chrom][:]).upper()
+                chrom_obj = genome[chrom]
             except KeyError:
                 skipped += len(group)
                 continue
@@ -145,41 +146,49 @@ class SonglabClinvarTask(BaseGFMZeroShotSNVTask):
                 skipped += len(group)
                 continue
 
-            chrom_len = len(chrom_seq)
-
-            # Precompute window starts and ends
-            starts = (group['pos'] - 1 - flank_size).clip(lower=0).astype(int).to_numpy()
-            ends = (starts + self.max_sequence_length)
-
-            # Mask rows where the requested window would be out of bounds
-            in_bounds_mask = ends <= chrom_len
-
-            # Iterate only over in-bounds windows (using numpy for speed)
-            valid_indices = group.index.to_numpy()[in_bounds_mask]
-            valid_starts = starts[in_bounds_mask]
-
-            for idx_i, start in zip(valid_indices, valid_starts):
-                row = df.loc[idx_i]
-                pos = int(row['pos'])
-                ref_allele = row['ref']
-                alt_allele = row['alt']
+            # Process each variant with padding support
+            for _, row in group.iterrows():
+                pos = int(row['pos'])  # 1-based VCF position
+                ref_allele = str(row['ref']).upper()
+                alt_allele = str(row['alt']).upper()
                 label = int(row['label']) if isinstance(row['label'], (bool, np.bool_)) else row['label']
 
-                window_start = start
-                window_end = window_start + self.max_sequence_length
+                # Convert to 0-based
+                pos_0 = pos - 1
+                
+                # Extract reference sequence using padding function (handles chromosome boundaries)
+                try:
+                    ref_seq = pad_sequence_centered_variant(
+                        chromosome=chrom_obj,
+                        variant_pos_0based=pos_0,
+                        max_sequence_length=self.max_sequence_length,
+                        variant_pos_in_seq=flank_size
+                    )
+                except Exception as e:
+                    logging.warning(f"Error extracting sequence for {chrom}:{pos}. {str(e)}. Skipping.")
+                    skipped += 1
+                    continue
 
-                # Extract reference sequence slice from in-memory chromosome string
-                ref_seq = chrom_seq[window_start:window_end]
+                # Verify sequence length
                 if len(ref_seq) != self.max_sequence_length:
                     skipped += 1
                     continue
 
-                variant_pos_in_window = pos - 1 - window_start
-                if variant_pos_in_window != flank_size:
+                # Verify variant is at expected center position
+                variant_pos_in_window = flank_size
+                
+                # Check if padding character is at variant position (shouldn't happen, but safety check)
+                if variant_pos_in_window < len(ref_seq) and ref_seq[variant_pos_in_window] == 'P':
+                    logging.warning(f"Variant position at {chrom}:{pos} falls in padding region. Skipping.")
                     skipped += 1
                     continue
 
-                if ref_seq[variant_pos_in_window] != ref_allele:
+                # Validate reference allele matches genome
+                if variant_pos_in_window < len(ref_seq):
+                    if ref_seq[variant_pos_in_window] != ref_allele:
+                        skipped += 1
+                        continue
+                else:
                     skipped += 1
                     continue
 

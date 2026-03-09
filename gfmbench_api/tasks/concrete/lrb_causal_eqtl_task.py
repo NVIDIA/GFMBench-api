@@ -14,7 +14,7 @@ from typing import Any, Tuple, Optional, Dict, List
 # Framework Imports
 from gfmbench_api.tasks.base.base_gfm_supervised_variant_effect_task import BaseGFMSupervisedVariantEffectTask
 from gfmbench_api.utils.fileutils import ensure_reference_genome
-from gfmbench_api.utils.preprocutils import standardize_sequence, pad_sequence
+from gfmbench_api.utils.preprocutils import standardize_sequence, pad_sequence_centered_variant
 
 
 class _LRBCausalEqtlDataset(Dataset):
@@ -34,12 +34,14 @@ class _LRBCausalEqtlDataset(Dataset):
         label = int(row["label"])
         tissue_id = self.tissue_map.get(row.get("tissue", "Unknown"), 0)
 
-        # Extract Context
-        start = (pos1 - 1) - self.center
-        end = start + self.seq_len
-        
-        # Positive Strand Only (mentioned in the paper)
-        seq_str = pad_sequence(self.fasta[chrom], start=start, sequence_length=self.seq_len, end=end, negative_strand=False)
+        # Extract Context using padding function (handles chromosome boundaries)
+        pos_0 = pos1 - 1
+        seq_str = pad_sequence_centered_variant(
+            chromosome=self.fasta[chrom],
+            variant_pos_0based=pos_0,
+            max_sequence_length=self.seq_len,
+            variant_pos_in_seq=self.center
+        )
         seq_list = list(seq_str.upper())
         
         # Inject Alleles
@@ -72,7 +74,7 @@ class LRBCausalEqtlTask(BaseGFMSupervisedVariantEffectTask):
         return 2
 
     def _get_default_max_seq_len(self) -> int:
-        return 160000 
+        return 1048576 
 
     def _create_datasets(self) -> Tuple[Optional[Dataset], Optional[Dataset], Dataset]:
         task_data_dir = os.path.join(self.root_data_dir_path, self.get_task_name())

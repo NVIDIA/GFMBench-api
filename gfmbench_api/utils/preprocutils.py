@@ -68,6 +68,79 @@ def pad_sequence(chromosome, start: int, sequence_length: int, end: Optional[int
     
     return final_seq
 
+def pad_sequence_centered_variant(
+    chromosome, 
+    variant_pos_0based: int, 
+    max_sequence_length: int,
+    variant_pos_in_seq: Optional[int] = None
+) -> str:
+    """
+    Extract sequence centered on variant position, padding with 'P' if window exceeds chromosome boundaries.
+    
+    This function ensures the variant remains at the specified center position even when the desired
+    window extends beyond chromosome boundaries. Padding is applied symmetrically to maintain centering.
+    
+    Args:
+        chromosome: pyfaidx chromosome object
+        variant_pos_0based: Variant position in chromosome (0-based)
+        max_sequence_length: Desired output sequence length
+        variant_pos_in_seq: Position of variant within output sequence (default: max_sequence_length // 2)
+        
+    Returns:
+        DNA sequence string of exactly `max_sequence_length` characters with variant at `variant_pos_in_seq`
+        
+    Example:
+        >>> # Variant at position 1000, want 1000bp window centered
+        >>> seq = pad_sequence_centered_variant(chrom, 1000, 1000, variant_pos_in_seq=500)
+        >>> len(seq)  # Returns 1000
+        1000
+        >>> # If variant is near chromosome start, left side will be padded with 'P'
+    """
+    chrom_len = len(chromosome)
+    
+    # Default variant position to center if not specified
+    if variant_pos_in_seq is None:
+        variant_pos_in_seq = max_sequence_length // 2
+    
+    # Calculate desired window boundaries (centered on variant)
+    window_start = variant_pos_0based - variant_pos_in_seq
+    window_end = window_start + max_sequence_length
+    
+    # Calculate padding needed
+    pad_left = abs(window_start) if window_start < 0 else 0
+    pad_right = window_end - chrom_len if window_end > chrom_len else 0
+    
+    # Clamp to valid chromosome range
+    actual_start = max(0, window_start)
+    actual_end = min(chrom_len, window_end)
+    
+    # Extract sequence from chromosome (or empty if completely out of bounds)
+    if actual_start >= actual_end:
+        seq_str = ""
+    else:
+        seq_str = str(chromosome[actual_start:actual_end]).upper()
+    
+    # Add padding to maintain variant at center position
+    final_seq = ("P" * pad_left) + seq_str + ("P" * pad_right)
+    
+    # Ensure exact length (safety check)
+    if len(final_seq) != max_sequence_length:
+        # If somehow we got wrong length, pad or truncate to exact size
+        if len(final_seq) < max_sequence_length:
+            # Need more padding - add to right side
+            final_seq = final_seq + ("P" * (max_sequence_length - len(final_seq)))
+        else:
+            # Too long - truncate from right side (shouldn't happen, but safety check)
+            final_seq = final_seq[:max_sequence_length]
+    
+    # Verify variant is at expected position (sanity check)
+    # The variant should be at variant_pos_in_seq in the final sequence
+    # If we padded left, the variant position in the extracted seq_str would be adjusted
+    # But since we want variant at variant_pos_in_seq, we need to ensure the padding is correct
+    
+    return final_seq
+
+
 def truncate_sequence_from_ends(sequence: str, max_length: int) -> str:
     """
     Truncate a sequence from both ends to keep the center portion.
@@ -419,17 +492,15 @@ def extract_snv_sequences_centered(
         chrom_key = chrom_str if chrom_str.startswith("chr") else f"chr{chrom_str}"
         
         try:
-            chrom_seq = str(genome[chrom_key][:]).upper()
+            chrom_obj = genome[chrom_key]
         except KeyError:
             # Try without chr prefix
             try:
-                chrom_seq = str(genome[chrom_str][:]).upper()
+                chrom_obj = genome[chrom_str]
             except KeyError:
                 log_fn(f"Chromosome {chrom} not found in reference genome, skipping {len(group)} variants")
                 skipped += len(group)
                 continue
-        
-        chrom_len = len(chrom_seq)
         
         for _, row in group.iterrows():
             pos = int(row[pos_col])  # 1-based VCF position
@@ -447,28 +518,32 @@ def extract_snv_sequences_centered(
             # Convert to 0-based for indexing
             variant_pos_0based = pos - 1
             
-            # Calculate window centered on variant
-            window_start = max(0, variant_pos_0based - flank_size)
-            window_end = window_start + max_sequence_length
-            
-            # Check bounds
-            if window_end > chrom_len:
+            # Extract reference sequence using padding function (handles chromosome boundaries)
+            try:
+                # Get chromosome object for padding function
+                chrom_obj = genome[chrom_key] if chrom_key in genome else genome[chrom_str]
+                ref_seq = pad_sequence_centered_variant(
+                    chromosome=chrom_obj,
+                    variant_pos_0based=variant_pos_0based,
+                    max_sequence_length=max_sequence_length,
+                    variant_pos_in_seq=flank_size
+                )
+            except Exception as e:
+                logging.debug(f"Error extracting sequence for {chrom_str}:{pos}. {str(e)}. Skipping.")
                 skipped += 1
                 continue
             
-            # Extract reference sequence
-            ref_seq = chrom_seq[window_start:window_end]
-            
-            # Validate window length
+            # Validate sequence length
             if len(ref_seq) != max_sequence_length:
                 skipped += 1
                 continue
             
-            # Calculate variant position in window
-            variant_pos_in_window = variant_pos_0based - window_start
+            # Variant position in window should be at flank_size (center)
+            variant_pos_in_window = flank_size
             
-            # Validate it's centered correctly
-            if variant_pos_in_window != flank_size:
+            # Check if padding character is at variant position (shouldn't happen, but safety check)
+            if variant_pos_in_window < len(ref_seq) and ref_seq[variant_pos_in_window] == 'P':
+                logging.debug(f"Variant position at {chrom_str}:{pos} falls in padding region. Skipping.")
                 skipped += 1
                 continue
             

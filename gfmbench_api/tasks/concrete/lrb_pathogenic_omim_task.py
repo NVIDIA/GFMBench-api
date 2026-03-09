@@ -9,7 +9,7 @@ from pyfaidx import Fasta
 from huggingface_hub import hf_hub_download
 
 from gfmbench_api.utils.fileutils import ensure_reference_genome
-from gfmbench_api.utils.preprocutils import standardize_sequence, pad_sequence
+from gfmbench_api.utils.preprocutils import standardize_sequence, pad_sequence_centered_variant
 from gfmbench_api.tasks.base.base_gfm_zeroshot_snv_task import BaseGFMZeroShotSNVTask
 
 
@@ -71,13 +71,14 @@ class _PathogenicOmimDataset(Dataset):
         alt = str(row["ALT"]).upper()
         y = int(row["INT_LABEL"])
         
-        start = pos1 - 1
+        pos_0 = pos1 - 1
         
-        # Get Reference Sequence
-        ref_seq_raw = pad_sequence(
+        # Get Reference Sequence using padding function (handles chromosome boundaries)
+        ref_seq_raw = pad_sequence_centered_variant(
             chromosome=self.fasta[chrom],
-            start=start,
-            sequence_length=self.seq_len
+            variant_pos_0based=pos_0,
+            max_sequence_length=self.seq_len,
+            variant_pos_in_seq=self.center
         )
         ref_seq = standardize_sequence(ref_seq_raw)
         
@@ -106,7 +107,7 @@ class LrbVariantEffectPathogenicOmimTask(BaseGFMZeroShotSNVTask):
         return "lrb_variant_effect_pathogenic_omim"
 
     def _get_default_max_seq_len(self) -> int:
-        return 12000
+        return 1048576
 
     def _get_variant_position_in_sequence(self) -> int:
         return self.max_sequence_length // 2

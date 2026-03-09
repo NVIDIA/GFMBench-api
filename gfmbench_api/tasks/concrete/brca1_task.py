@@ -5,6 +5,7 @@ import torch
 from gfmbench_api.tasks.base.base_gfm_zeroshot_snv_task import BaseGFMZeroShotSNVTask
 from gfmbench_api.metrics import SNVVariantEffectPredictionLLRAUROC
 from gfmbench_api.utils.fileutils import download_file_from_url
+from gfmbench_api.utils.preprocutils import pad_sequence_centered_variant
 import glob
 import json
 import subprocess
@@ -45,7 +46,7 @@ class BRCA1Task(BaseGFMZeroShotSNVTask):
         super().__init__(root_data_dir_path, task_config)
     
     def _get_default_max_seq_len(self) -> int:
-        return 8192
+        return 1048576
     
     def get_task_name(self):
         return "brca1" 
@@ -108,22 +109,36 @@ class BRCA1Task(BaseGFMZeroShotSNVTask):
             ref_allele = str(row['ref']).upper()
             alt_allele = str(row['alt']).upper()
             
-            window_start = max(0, pos - self._get_variant_position_in_sequence())
-            window_end = window_start + self.max_sequence_length
+            # Get variant position in sequence (center)
+            variant_pos_in_seq = self._get_variant_position_in_sequence()
             
+            # Extract reference sequence using padding function (handles chromosome boundaries)
             try:
-                ref_seq = str(genome[chrom][window_start:window_end]).upper()
+                ref_seq = pad_sequence_centered_variant(
+                    chromosome=genome[chrom],
+                    variant_pos_0based=pos,
+                    max_sequence_length=self.max_sequence_length,
+                    variant_pos_in_seq=variant_pos_in_seq
+                )
             except KeyError:
                 print(f"Warning: {chrom} not found in genome keys {list(genome.keys())}. Skipping.")
                 continue
-            
-            variant_pos_in_window = pos - window_start
-            
-            if variant_pos_in_window != self._get_variant_position_in_sequence():
+            except Exception as e:
+                print(f"Error extracting sequence for {chrom}:{pos+1}. {str(e)}. Skipping.")
                 continue
             
-            if variant_pos_in_window < len(ref_seq):
-                extracted_ref = ref_seq[variant_pos_in_window:variant_pos_in_window + len(ref_allele)]
+            # Verify sequence length
+            if len(ref_seq) != self.max_sequence_length:
+                print(f"Sequence length mismatch at {chrom}:{pos+1}. Expected {self.max_sequence_length}, got {len(ref_seq)}. Skipping.")
+                continue
+            
+            # Assert that the reference allele matches the genome at variant position
+            if variant_pos_in_seq < len(ref_seq):
+                extracted_ref = ref_seq[variant_pos_in_seq:variant_pos_in_seq + len(ref_allele)]
+                # Skip if padding character is at variant position (shouldn't happen, but safety check)
+                if 'P' in extracted_ref:
+                    print(f"Variant position at {chrom}:{pos+1} falls in padding region. Skipping.")
+                    continue
                 assert extracted_ref == ref_allele, (
                     f"Reference mismatch at {chrom}:{pos+1}. "
                     f"Data: '{ref_allele}', Genome: '{extracted_ref}'."
@@ -131,9 +146,9 @@ class BRCA1Task(BaseGFMZeroShotSNVTask):
             else:
                 continue
             
-            var_seq = (ref_seq[:variant_pos_in_window] + 
+            var_seq = (ref_seq[:variant_pos_in_seq] + 
                       alt_allele + 
-                      ref_seq[variant_pos_in_window + len(ref_allele):])
+                      ref_seq[variant_pos_in_seq + len(ref_allele):])
             
             reference_sequences.append(ref_seq)
             variant_sequences.append(var_seq)

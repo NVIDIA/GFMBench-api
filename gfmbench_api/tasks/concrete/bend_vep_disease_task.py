@@ -8,6 +8,7 @@ import torch
 from gfmbench_api.tasks.base.base_gfm_zeroshot_snv_task import BaseGFMZeroShotSNVTask
 import numpy as np
 from gfmbench_api.utils.fileutils import download_file_from_url, ensure_reference_genome
+from gfmbench_api.utils.preprocutils import pad_sequence_centered_variant
 
 
 class BendVEPDisease(BaseGFMZeroShotSNVTask):
@@ -38,8 +39,8 @@ class BendVEPDisease(BaseGFMZeroShotSNVTask):
         super().__init__(root_data_dir_path, task_config)
     
     def _get_default_max_seq_len(self) -> int:
-        """Return task's default maximum sequence length (512bp)."""
-        return 512
+        """Return task's default maximum sequence length (1048576bp)."""
+        return 1048576
     
     
     def get_task_name(self):
@@ -102,13 +103,17 @@ class BendVEPDisease(BaseGFMZeroShotSNVTask):
             ref_allele = str(row['ref']).upper()
             alt_allele = str(row['alt']).upper()
             
-            # Calculate window around variant (centered)
-            window_start = max(0, pos - self._get_variant_position_in_sequence())
-            window_end = window_start + self.max_sequence_length
+            # Get variant position in sequence (center)
+            variant_pos_in_seq = self._get_variant_position_in_sequence()
             
-            # Extract reference sequence from genome
+            # Extract reference sequence using padding function (handles chromosome boundaries)
             try:
-                ref_seq = str(genome[chrom][window_start:window_end]).upper()
+                ref_seq = pad_sequence_centered_variant(
+                    chromosome=genome[chrom],
+                    variant_pos_0based=pos,
+                    max_sequence_length=self.max_sequence_length,
+                    variant_pos_in_seq=variant_pos_in_seq
+                )
             except KeyError:
                 logging.warning(f"Chromosome {chrom} not found in reference genome. Skipping variant at position {pos}")
                 continue
@@ -116,15 +121,18 @@ class BendVEPDisease(BaseGFMZeroShotSNVTask):
                 logging.warning(f"Error extracting sequence for {chrom}:{pos}. {str(e)}. Skipping.")
                 continue
             
-            # Calculate the relative position of the variant within the window
-            variant_pos_in_window = pos - window_start
-            if variant_pos_in_window != self._get_variant_position_in_sequence():
-                logging.warning(f"Variant position in window does not match expected position. Expected {self._get_variant_position_in_sequence()}, got {variant_pos_in_window}. Skipping.")
+            # Verify sequence length
+            if len(ref_seq) != self.max_sequence_length:
+                logging.warning(f"Sequence length mismatch at {chrom}:{pos}. Expected {self.max_sequence_length}, got {len(ref_seq)}. Skipping.")
                 continue
             
-            # Assert that the reference allele matches the genome
-            if variant_pos_in_window < len(ref_seq):
-                extracted_ref = ref_seq[variant_pos_in_window:variant_pos_in_window + len(ref_allele)]
+            # Assert that the reference allele matches the genome at variant position
+            if variant_pos_in_seq < len(ref_seq):
+                extracted_ref = ref_seq[variant_pos_in_seq:variant_pos_in_seq + len(ref_allele)]
+                # Skip if padding character is at variant position (shouldn't happen, but safety check)
+                if 'P' in extracted_ref:
+                    logging.warning(f"Variant position at {chrom}:{pos} falls in padding region. Skipping.")
+                    continue
                 assert extracted_ref == ref_allele, (
                     f"Reference nucleotide mismatch at {chrom}:{pos}. "
                     f"Dataframe has '{ref_allele}' but reference genome has '{extracted_ref}'. "
@@ -132,14 +140,14 @@ class BendVEPDisease(BaseGFMZeroShotSNVTask):
                 )
             else:
                 raise ValueError(
-                    f"Variant position {variant_pos_in_window} is out of bounds for sequence of length {len(ref_seq)} "
+                    f"Variant position {variant_pos_in_seq} is out of bounds for sequence of length {len(ref_seq)} "
                     f"at {chrom}:{pos}"
                 )
             
             # Create variant sequence by substituting the allele
-            var_seq = (ref_seq[:variant_pos_in_window] + 
+            var_seq = (ref_seq[:variant_pos_in_seq] + 
                       alt_allele + 
-                      ref_seq[variant_pos_in_window + len(ref_allele):])
+                      ref_seq[variant_pos_in_seq + len(ref_allele):])
             
             reference_sequences.append(ref_seq)
             variant_sequences.append(var_seq)
