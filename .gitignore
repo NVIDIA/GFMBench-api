@@ -1,0 +1,7 @@
+# Bytecode and caches (created when Python imports modules)
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Editor / IDE (local machine)
+.vscode/
