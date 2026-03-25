@@ -438,7 +438,7 @@ This project will download and install additional third-party open source softwa
 
 NVIDIA-authored code in this repository is licensed under the **Apache License, Version 2.0**. The full text is in [LICENSE](LICENSE).
 
-Each contributed `.py` file includes NVIDIA `SPDX-FileCopyrightText` and `SPDX-License-Identifier: Apache-2.0`, plus **third-party URL** notices that are **scoped to that file** (only URLs this module actually uses for downloads or hardcoded assets). Modules without embedded URLs use the single comment line: `This module does not embed third-party data download URLs.` Python package attributions remain in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md). The full Apache-2.0 text is in [LICENSE](LICENSE).
+Each contributed `.py` file includes NVIDIA `SPDX-FileCopyrightText`, `SPDX-License-Identifier: Apache-2.0`, and the **short Apache-2.0 notice** (through “limitations under the License”), then **third-party URL** notices scoped to that file (or the line stating that the module does not embed third-party data download URLs). Python package attributions remain in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md). The full Apache-2.0 text is in [LICENSE](LICENSE).
 
 ## Citation
 @article{larey2026gfmbench,
