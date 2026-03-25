@@ -1,3 +1,8 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+#
+# Third-party URL notices for this file (Python packages: THIRD_PARTY_NOTICES.md):
+# - https://huggingface.co/zhihan1996/DNABERT-2-117M — Apache-2.0
 from typing import List, Optional, Tuple
 from dataclasses import dataclass
 

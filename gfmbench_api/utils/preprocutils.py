@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+#
+# This module does not embed third-party data download URLs.
 """
 Utility functions for extracting sequences from reference genome and converting dataset-specific formats to the common "sequence", "label" format.
 Handles SNV variants with proper windowing and validation.

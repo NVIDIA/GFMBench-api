@@ -1,4 +1,9 @@
 # -*- coding: utf-8 -*-
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+#
+# Third-party URL notices for this file (Python packages: THIRD_PARTY_NOTICES.md):
+# - https://huggingface.co/datasets/songlab/TraitGym — MIT
 """TraitGym.ipynb
 
 Original file is located at

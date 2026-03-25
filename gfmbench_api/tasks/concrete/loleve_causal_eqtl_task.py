@@ -1,3 +1,9 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+#
+# Third-party URL notices for this file (Python packages: THIRD_PARTY_NOTICES.md):
+# - https://huggingface.co/datasets/Marks-lab/LOL-EVE-eQTL_benchmark — MIT
+
 # benchmarks/tasks/concrete/loleve_causal_eqtl.py
 from __future__ import annotations
 

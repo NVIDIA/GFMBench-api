@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+#
+# This module does not embed third-party data download URLs.
 import numpy as np
 from sklearn.metrics import accuracy_score
 from .base_metric import BaseMetric

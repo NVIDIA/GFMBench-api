@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+#
+# This module does not embed third-party data download URLs.
 """Standalone Evo2 model wrapper for inference using native NeMo inference API.
 
 This module provides a wrapper around Evo2 that uses the NeMo inference API directly,

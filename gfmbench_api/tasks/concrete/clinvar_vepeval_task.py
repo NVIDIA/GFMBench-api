@@ -1,3 +1,9 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+#
+# Third-party URL notices for this file (Python packages: THIRD_PARTY_NOTICES.md):
+# - https://www.biorxiv.org/content/biorxiv/early/2025/09/10/2025.09.05.674459/DC1/embed/media-1.zip?download=true — CC-BY-NC-ND-4.0
+# - https://hgdownload.soe.ucsc.edu/goldenPath/hg38/bigZips/hg38.fa.gz — LicenseRef-UCSC-Genome-Browser
 import os
 import zipfile
 from typing import Optional, Dict

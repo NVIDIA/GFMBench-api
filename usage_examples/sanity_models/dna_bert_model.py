@@ -1,3 +1,8 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+#
+# Third-party URL notices for this file (Python packages: THIRD_PARTY_NOTICES.md):
+# - https://huggingface.co/armheb/DNA_bert_6 — Apache-2.0
 from typing import List, Optional, Tuple
 
 import numpy as np

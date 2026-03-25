@@ -1,3 +1,8 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+#
+# Third-party URL notices for this file (Python packages: THIRD_PARTY_NOTICES.md):
+# - https://huggingface.co/datasets/m42-health/variant-benchmark — CC-BY-NC-4.0
 import logging
 import os
 from typing import Any, Dict, List, Optional

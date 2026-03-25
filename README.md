@@ -430,14 +430,15 @@ class MyZeroShotTask(BaseGFMZeroShotSNVTask):
 
 ## NOTICE
 
-This project may download additional third-party software projects. Review the license terms of these components before use.
+This project will download and install additional third-party open source software projects, including datasets licensed with non-commercial terms. Review the license terms of these open source projects before use.
 
-**Third-party components:**
-- LicenseRef-UCSC-Genome-Browser, see https://genome.ucsc.edu/license/
+**Third-party components and attributions:** see [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md) (Python dependencies, Hugging Face assets, reference genomes, and other data URLs). Example: LicenseRef-UCSC-Genome-Browser — https://genome.ucsc.edu/license/
 
 ## License
 
-[Please add license information here if required.]
+NVIDIA-authored code in this repository is licensed under the **Apache License, Version 2.0**. The full text is in [LICENSE](LICENSE).
+
+Each contributed `.py` file includes NVIDIA `SPDX-FileCopyrightText` and `SPDX-License-Identifier: Apache-2.0`, plus **third-party URL** notices that are **scoped to that file** (only URLs this module actually uses for downloads or hardcoded assets). Modules without embedded URLs use the single comment line: `This module does not embed third-party data download URLs.` Python package attributions remain in [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md). The full Apache-2.0 text is in [LICENSE](LICENSE).
 
 ## Citation
 @article{larey2026gfmbench,

@@ -1,3 +1,7 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+#
+# This module does not embed third-party data download URLs.
 from .base_metric import BaseMetric
 from .multilabel_classification_accuracy import MultiLabelClassificationAccuracy
 from .multilabel_classification_mcc import MultiLabelClassificationMCC
