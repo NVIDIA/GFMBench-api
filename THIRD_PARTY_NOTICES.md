@@ -1,9 +1,6 @@
 # Third-Party Notices and Attributions
 
 This document lists third-party open source software, models, datasets, and data sources used with or pulled in by **GFMBench-API**. SPDX License List short identifiers are used where applicable. Custom or site-specific terms are indicated with `LicenseRef-*` (see project `LICENSE` and upstream sites for full text).
-
-NVIDIA-authored source files use `SPDX-FileCopyrightText`, `SPDX-License-Identifier: Apache-2.0`, and the standard **short Apache-2.0 notice** in the header, then **only the third-party data URLs that file actually references** (or a line stating that the module does not embed third-party data download URLs). **Python package / dependency** attributions are listed only in this document. To regenerate or adjust per-file URL lists in bulk, see `scripts/_apply_per_file_third_party_headers.py`.
-
 ---
 
 ## Python packages (direct dependencies in `requirements.txt`)
