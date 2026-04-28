@@ -69,13 +69,12 @@ def parse_args():
     parser.add_argument(
         "--csv_path",
         type=str,
-        default="/efs/alarey/projects/sense/resutls/jepa/benchmark_DNABERT2_160225.csv",
         help="CSV path for the benchmark report (loads existing if present, saves here)"
     )
     parser.add_argument(
         "--report_algo_name",
         type=str,
-        default="temp",
+        default="my_algo",
         help="Name for this model in the report"
     )
     parser.add_argument(
@@ -177,7 +176,7 @@ def main():
     sanity_check_mode = False  # Set to True for quick testing with 100 samples
     
     # Path to the root data directory
-    root_data_dir_path = "/efs/alarey/projects/sense/data/"
+    root_data_dir_path = "/path/to/your/root/data/directory"
     
     # CSV path for the benchmark report (loads existing if present, saves here)
     csv_path = args.csv_path
