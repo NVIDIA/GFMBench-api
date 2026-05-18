@@ -54,21 +54,20 @@ class GFMWithProjection(BaseGFMModel):
                        otherwise returns sequence representative embeddings of shape [batch_size, hidden_dim]
         """
         # Get embeddings from base model using infer_sequence_to_sequence
-        _, _, sequence_repr_np = self.base_model.infer_sequence_to_sequence(sequences, conditional_input)
-        
+        _, _, sequence_repr_np = self.base_model.infer_sequence_to_sequence(
+            sequences, conditional_input
+        )
         if sequence_repr_np is None:
             return None
-        
-        # Apply projection layer if it exists
+        sequence_repr = torch.from_numpy(sequence_repr_np).to(self.device)
+
         if self.projection_layer is not None:
             with torch.no_grad():
-                sequence_repr = torch.from_numpy(sequence_repr_np).to(self.device)
                 logits = self.projection_layer(sequence_repr)
-                # Apply softmax to convert logits to probabilities
                 probs = torch.softmax(logits, dim=1)
                 return probs.cpu().numpy()
         else:
-            return sequence_repr_np
+            return sequence_repr.detach().cpu().numpy()
     
     def infer_sequence_to_sequence(self, sequences: List[str], conditional_input=None) -> Tuple[Optional[np.ndarray], Optional[np.ndarray], Optional[np.ndarray]]:
         """
@@ -179,28 +178,27 @@ class GFMWithProjection(BaseGFMModel):
             np.ndarray: Probabilities of shape [batch_size, num_labels] if projection layer exists,
                        otherwise returns None
         """
+        if self.projection_layer is None:
+            return None
         # Get representative embeddings from base model using infer_sequence_to_sequence
-        _, _, var_repr_np = self.base_model.infer_sequence_to_sequence(variant_sequences, conditional_input)
-        _, _, ref_repr_np = self.base_model.infer_sequence_to_sequence(ref_sequences, conditional_input)
-        
-        if var_repr_np is None or ref_repr_np is None:
+        batch_size = len(variant_sequences)
+        combined_sequences = variant_sequences + ref_sequences
+        _, _, combined_repr_np = self.base_model.infer_sequence_to_sequence(
+             combined_sequences, conditional_input
+         )
+        if combined_repr_np is None:
             return None
-        
-        # Apply projection layer if it exists
-        if self.projection_layer is not None:
-            with torch.no_grad():
-                var_repr = torch.from_numpy(var_repr_np).to(self.device)
-                ref_repr = torch.from_numpy(ref_repr_np).to(self.device)
-                
-                # Combine embeddings - concatenate variant and ref representations
-                # Shape: [batch_size, hidden_dim * 2]
-                combined_repr = torch.cat([var_repr, ref_repr], dim=1)
-                
-                logits = self.projection_layer(combined_repr)
-                # Apply softmax to convert logits to probabilities
-                probs = torch.softmax(logits, dim=1)
-                return probs.cpu().numpy()
-        else:
-            return None
+        combined_repr = torch.from_numpy(combined_repr_np).to(self.device)
+        var_repr = combined_repr[:batch_size]
+        ref_repr = combined_repr[batch_size:]
+
+        with torch.no_grad():
+            # Combine embeddings - concatenate variant and ref representations
+            # Shape: [batch_size, hidden_dim * 2]
+            combined_pair_repr = torch.cat([var_repr, ref_repr], dim=1)
+            logits = self.projection_layer(combined_pair_repr)
+            # Apply softmax to convert logits to probabilities
+            probs = torch.softmax(logits, dim=1)
+        return probs.cpu().numpy()
 
 

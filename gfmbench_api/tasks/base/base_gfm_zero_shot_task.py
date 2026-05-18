@@ -116,15 +116,34 @@ class BaseGFMZeroShotTask(BaseGFMTask):
 
         for batch_data in tqdm(data_loader, desc="Evaluating (Zero-Shot)"):
             variant_sequences, reference_sequences, labels, conditional_input = batch_data
-            
+
+            batch_size = len(variant_sequences)
+            combined_sequences = list(variant_sequences) + list(reference_sequences)
+
             # Get sequence-to-sequence outputs for both variant and reference
             # Returns: (sequence_probs, sequence_embeddings, sequence_representative)
-            variant_probs_np, variant_embeddings_np, variant_repr_np = self._safe_model_call(
-                model, 'infer_sequence_to_sequence', variant_sequences, conditional_input, num_outputs=3
+            combined_probs_np, combined_embeddings_np, combined_repr_np = self._safe_model_call(
+                model, 'infer_sequence_to_sequence', combined_sequences, conditional_input, num_outputs=3
             )
-            reference_probs_np, reference_embeddings_np, reference_repr_np = self._safe_model_call(
-                model, 'infer_sequence_to_sequence', reference_sequences, conditional_input, num_outputs=3
-            )
+            variant_probs_np = None
+            reference_probs_np = None
+            if combined_probs_np is not None:
+                variant_probs_np = combined_probs_np[:batch_size]
+                reference_probs_np = combined_probs_np[batch_size:]
+            
+            variant_embeddings_np = None
+            reference_embeddings_np = None
+
+            if combined_embeddings_np is not None:
+                variant_embeddings_np = combined_embeddings_np[:batch_size]
+                reference_embeddings_np = combined_embeddings_np[batch_size:]
+
+            variant_repr_np = None
+            reference_repr_np = None
+
+            if combined_repr_np is not None:
+                variant_repr_np = combined_repr_np[:batch_size]
+                reference_repr_np = combined_repr_np[batch_size:]
             
             # Build outputs dict for metric argument lookup
             outputs = {
