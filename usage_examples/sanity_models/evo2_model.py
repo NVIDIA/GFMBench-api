@@ -70,6 +70,9 @@ class Evo2BioNeMoModel:
         Maximum token length for inference (sequences are truncated).
     """
 
+    force_linear_probe = True
+    supports_backbone_finetuning = False
+
     def __init__(
         self,
         ckpt_tag: str = "evo2/1b-8k-bf16:1.0",
@@ -120,6 +123,7 @@ class Evo2BioNeMoModel:
         if isinstance(loaded, tuple):
             loaded = loaded[0]
         self.model.load_state_dict(loaded, strict=False)
+        self._freeze_backbone()
         logger.info("Checkpoint loaded successfully")
 
         # ── 5. Embedding hook (captures hidden states before lm_head) ─────
@@ -128,6 +132,12 @@ class Evo2BioNeMoModel:
         self.model.output_layer.register_forward_pre_hook(
             lambda _mod, args: setattr(self, "_last_hidden", args[0])
         )
+
+    def _freeze_backbone(self) -> None:
+        """Evo2 is used as a frozen feature extractor; only external heads train."""
+        for param in self.model.parameters():
+            param.requires_grad_(False)
+        self.model.eval()
 
     # ------------------------------------------------------------------
     # Low-level forward
@@ -261,8 +271,8 @@ class Evo2BioNeMoModel:
         return self
 
     def train(self, mode: bool = True):
-        """Set training mode."""
-        self.model.train(mode)
+        """Keep the Evo2 backbone frozen/eval even during projection training."""
+        self._freeze_backbone()
         return self
 
     def to(self, device: str):
@@ -296,6 +306,7 @@ class Evo2BioNeMoModel:
             state = torch.load(ckpt_root, map_location=self.device)
             state = state.get("model_state_dict", state)
             self.model.load_state_dict(state, strict=False)
+            self._freeze_backbone()
             logger.info("Loaded torch checkpoint: %s", checkpoint_path)
             return self
 
@@ -312,5 +323,6 @@ class Evo2BioNeMoModel:
         if isinstance(loaded, tuple):
             loaded = loaded[0]
         self.model.load_state_dict(loaded, strict=False)
+        self._freeze_backbone()
         logger.info("Loaded Evo2 checkpoint: %s", checkpoint_path)
         return self

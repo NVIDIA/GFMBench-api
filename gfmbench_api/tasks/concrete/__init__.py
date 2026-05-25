@@ -42,7 +42,6 @@ VariantBenchmarks tasks - Supervised variant effect:
 - VariantBenchmarksCommonVsRareTask: Common vs rare variant classification
 - VariantBenchmarksMEQTLTask: meQTL variant effect
 - VariantBenchmarksSQTLTask: sQTL variant effect
-
 """
 
 # GUE tasks (single sequence classification)

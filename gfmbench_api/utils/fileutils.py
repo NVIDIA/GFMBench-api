@@ -25,7 +25,6 @@ from typing import Callable, Iterable, List, Optional, Literal, Union
 
 from datasets import load_dataset, get_dataset_config_names, concatenate_datasets, DatasetDict
 
-import pandas as pd
 from huggingface_hub import hf_hub_download
 from huggingface_hub.utils import EntryNotFoundError, HfHubHTTPError
 
@@ -81,6 +80,46 @@ def download_hf_dataset_files(
 
         ds_dict = load_dataset(repo_id, subfolder)
         ds_dict.save_to_disk(local_dir)
+
+
+def gue_materialize_split_csvs_from_hf_disk(local_dir: str) -> None:
+    """
+    GUE single-config tasks expect ``train.csv``, ``dev.csv``, and ``test.csv`` under
+    ``local_dir``. ``download_hf_dataset_files(..., concat_tasks=False)`` only
+    writes a HuggingFace ``DatasetDict`` via ``save_to_disk``. This loads that
+    on-disk dict (when present) and writes any missing CSV splits
+    """
+    targets: list[tuple[str, tuple[str, ...]]] = [
+        ("train.csv", ("train",)),
+        ("dev.csv", ("dev", "validation")),
+        ("test.csv", ("test",)),
+    ]
+    out_paths = [os.path.join(local_dir, fname) for fname, _ in targets]
+    if all(os.path.exists(p) for p in out_paths):
+        return
+
+    try:
+        ddict = DatasetDict.load_from_disk(local_dir)
+    except Exception:
+        return
+
+    for fname, hf_keys in targets:
+        out_path = os.path.join(local_dir, fname)
+        if os.path.exists(out_path):
+            continue
+        key = next((k for k in hf_keys if k in ddict), None)
+        if key is None:
+            logging.warning(
+                "gue_materialize_split_csvs_from_hf_disk: no split in %s for %s "
+                "(dict keys: %s)",
+                local_dir,
+                fname,
+                list(ddict.keys()),
+            )
+            continue
+        ddict[key].to_pandas().to_csv(out_path, index=False)
+        logging.info("GUE: wrote %s from HuggingFace split %r", out_path, key)
+
 
 def iter_subset_dataframes(
     task_path: str,

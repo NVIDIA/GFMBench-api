@@ -30,7 +30,6 @@ from gfmbench_api.tasks.base import (
     # Supervised task hierarchy
     BaseGFMSupervisedMultiClassTask,
     BaseGFMSupervisedSingleSeqTask,
-    BaseGFMSupervisedSingleSeqLinearProbeTask,
     BaseGFMSupervisedVariantEffectTask,
     # Zero-shot task hierarchy
     BaseGFMZeroShotTask,
@@ -48,6 +47,12 @@ from gfmbench_api.tasks.concrete import (
     BendVEPDisease,
     # LRB tasks
     LrbVariantEffectPathogenicOmimTask,
+    LrbVariantEffectPathogenicClinvarTask,
+    LrbVariantEffectPathogenicClinvarSupervisedTask,
+    LrbVariantEffectPathogenicClinvarZeroShotTask,
+    LRBCausalEqtlTask,
+    LRBCausalEqtlSupervisedTask,
+    LRBCausalEqtlZeroShotTask,
     # TraitGym tasks
     TraitGymComplexTask,
     TraitGymMendelianTask,
@@ -69,7 +74,6 @@ __all__ = [
     # Supervised task hierarchy
     "BaseGFMSupervisedMultiClassTask",
     "BaseGFMSupervisedSingleSeqTask",
-    "BaseGFMSupervisedSingleSeqLinearProbeTask",
     "BaseGFMSupervisedVariantEffectTask",
     # Zero-shot task hierarchy
     "BaseGFMZeroShotTask",
@@ -84,6 +88,12 @@ __all__ = [
     "BendVEPDisease",
     # LRB tasks
     "LrbVariantEffectPathogenicOmimTask",
+    "LrbVariantEffectPathogenicClinvarTask",
+    "LrbVariantEffectPathogenicClinvarSupervisedTask",
+    "LrbVariantEffectPathogenicClinvarZeroShotTask",
+    "LRBCausalEqtlTask",
+    "LRBCausalEqtlSupervisedTask",
+    "LRBCausalEqtlZeroShotTask",
     # TraitGym tasks
     "TraitGymComplexTask",
     "TraitGymMendelianTask",

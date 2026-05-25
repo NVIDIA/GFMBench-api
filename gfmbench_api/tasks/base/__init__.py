@@ -38,9 +38,6 @@ from gfmbench_api.tasks.base.base_gfm_task import BaseGFMTask
 # Supervised task hierarchy
 from gfmbench_api.tasks.base.base_gfm_supervised_multiclass_task import BaseGFMSupervisedMultiClassTask
 from gfmbench_api.tasks.base.base_gfm_supervised_single_seq_task import BaseGFMSupervisedSingleSeqTask
-from gfmbench_api.tasks.base.base_gfm_supervised_single_seq_linear_probe_task import (
-    BaseGFMSupervisedSingleSeqLinearProbeTask,
-)
 from gfmbench_api.tasks.base.base_gfm_supervised_variant_effect_task import BaseGFMSupervisedVariantEffectTask
 
 # Zero-shot task hierarchy
@@ -55,7 +52,6 @@ __all__ = [
     # Supervised task hierarchy
     "BaseGFMSupervisedMultiClassTask",
     "BaseGFMSupervisedSingleSeqTask",
-    "BaseGFMSupervisedSingleSeqLinearProbeTask",
     "BaseGFMSupervisedVariantEffectTask",
     # Zero-shot task hierarchy
     "BaseGFMZeroShotTask",

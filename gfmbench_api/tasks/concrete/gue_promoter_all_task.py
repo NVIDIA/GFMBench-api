@@ -25,7 +25,10 @@ from torch.utils.data import Dataset
 
 from gfmbench_api.tasks.base.base_gfm_supervised_single_seq_task import BaseGFMSupervisedSingleSeqTask
 import numpy as np
-from gfmbench_api.utils.fileutils import download_hf_dataset_files
+from gfmbench_api.utils.fileutils import (
+    download_hf_dataset_files,
+    gue_materialize_split_csvs_from_hf_disk,
+)
 from gfmbench_api.utils.preprocutils import truncate_sequence_from_ends
 
 
@@ -60,7 +63,7 @@ class GuePromoterAllTask(BaseGFMSupervisedSingleSeqTask):
         test_path = os.path.join(data_dir, "test.csv")
 
         # Download data if not exists
-        if not all(os.path.exists(p) for p in [train_path, test_path]):
+        if not all(os.path.exists(p) for p in [train_path, val_path, test_path]):
             logging.info(f"Downloading {self.get_task_name()} from HuggingFace...")
             download_hf_dataset_files(
                 repo_id=self.hf_repo_id,
@@ -69,6 +72,8 @@ class GuePromoterAllTask(BaseGFMSupervisedSingleSeqTask):
                 local_dir=data_dir
             )
             logging.info(f"Data saved to: {data_dir}")
+
+        gue_materialize_split_csvs_from_hf_disk(data_dir)
 
         # Load CSVs
         train_df = pd.read_csv(train_path)

@@ -71,13 +71,13 @@ def parse_args():
     parser.add_argument(
         "--csv_path",
         type=str,
-        default="/efs/alarey/projects/sense/resutls/jepa/benchmark_DNABERT2_160225.csv",
+        required=True,
         help="CSV path for the benchmark report (loads existing if present, saves here)"
     )
     parser.add_argument(
         "--report_algo_name",
         type=str,
-        default="temp",
+        default="my_algo",
         help="Name for this model in the report"
     )
     parser.add_argument(
@@ -206,6 +206,11 @@ def main():
         raise ValueError(f"Unknown model: {args.model}. Supported models: {list(MODEL_REGISTRY.keys())}")
     ModelClass = MODEL_REGISTRY[args.model]["class"]
     max_length = MODEL_REGISTRY[args.model]["max_length"]
+    force_linear_probe = bool(
+        MODEL_REGISTRY[args.model].get("force_linear_probe", False)
+        or getattr(ModelClass, "force_linear_probe", False)
+        or not getattr(ModelClass, "supports_backbone_finetuning", True)
+    )
     
     logging.info(f"Model: {args.model}, Max sequence length: {max_length}")
     
@@ -222,7 +227,7 @@ def main():
     task_config = {
         "max_sequence_length": max_length,
         "batch_size": 16,
-        "max_num_samples": None,
+        "max_num_samples": 256,
         "disable_safe_model_call": args.disable_safe_model_call,
     }
     
@@ -261,13 +266,17 @@ def main():
         "lr": 3e-5,
         "optimizer": "AdamW",
         "weight_decay": 0.01,
-        "only_proj_layer": args.linear_prob,
+        "only_proj_layer": args.linear_prob or force_linear_probe,
         "batch_size": 8,
     }
 
     logging.info(f"********* Number of tasks: {len(tasks)} *********")
     logging.info(f"Model: {args.model}")
-    logging.info(f"Training mode: {'Linear Probing' if args.linear_prob else 'Full Fine-tuning'}")
+    if force_linear_probe and not args.linear_prob:
+        logging.info("Model requires a frozen backbone; forcing linear-probe training.")
+    logging.info(
+        f"Training mode: {'Linear Probing' if training_params['only_proj_layer'] else 'Full Fine-tuning'}"
+    )
     logging.info(f"Fine-tuning epochs: {args.epochs}")
 
     # Run each task
