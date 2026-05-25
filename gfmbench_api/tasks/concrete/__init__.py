@@ -1,0 +1,112 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+# http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+# This module does not embed third-party data download URLs.
+"""
+Concrete task implementations for GFM benchmarking.
+
+GUE (Genomic Understanding Evaluation) tasks - Single sequence classification:
+- GuePromoterAllTask: Promoter prediction (2-class)
+- GueSpliceSiteTask: Splice site prediction (3-class)
+- GueTranscriptionFactorTask: Transcription factor binding (2-class)
+
+BEND (Benchmark for Evaluating Nucleotide-level DNA) tasks - Zero-shot SNV:
+- BendVEPExpression: Variant effect on expression
+- BendVEPDisease: Variant effect on disease
+
+LRB (Long Range Benchmark) tasks:
+- LrbVariantEffectPathogenicOmimTask: OMIM pathogenic variant prediction
+- LrbVariantEffectPathogenicClinvarTask: ClinVar variant prediction (config-dispatched)
+- LRBCausalEqtlTask: Causal eQTL variant prediction (config-dispatched)
+
+TraitGym tasks - Zero-shot SNV:
+- TraitGymComplexTask: Complex trait variant prediction
+- TraitGymMendelianTask: Mendelian disease variant prediction
+
+VariantBenchmarks tasks - Supervised variant effect:
+- VariantBenchmarksCodingTask: Coding variant effect
+- VariantBenchmarksNonCodingTask: Non-coding variant effect
+- VariantBenchmarksExpressionTask: Expression variant effect
+- VariantBenchmarksCommonVsRareTask: Common vs rare variant classification
+- VariantBenchmarksMEQTLTask: meQTL variant effect
+- VariantBenchmarksSQTLTask: sQTL variant effect
+
+"""
+
+# GUE tasks (single sequence classification)
+from .gue_promoter_all_task import GuePromoterAllTask
+from .gue_splice_site_task import GueSpliceSiteTask
+from .gue_tf_all_task import GueTranscriptionFactorTask
+
+# BEND tasks (zero-shot SNV)
+from .bend_vep_expression_task import BendVEPExpression
+from .bend_vep_disease_task import BendVEPDisease
+
+# LRB tasks
+from .lrb_pathogenic_omim_task import LrbVariantEffectPathogenicOmimTask
+from .lrb_pathogenic_clinvar_task import (
+    LrbVariantEffectPathogenicClinvarTask,
+    LrbVariantEffectPathogenicClinvarSupervisedTask,
+    LrbVariantEffectPathogenicClinvarZeroShotTask,
+)
+from .lrb_causal_eqtl_task import (
+    LRBCausalEqtlTask,
+    LRBCausalEqtlSupervisedTask,
+    LRBCausalEqtlZeroShotTask,
+)
+
+# TraitGym tasks (zero-shot SNV)
+from .traitgym_complex_task import TraitGymComplexTask
+from .traitgym_mendelian_task import TraitGymMendelianTask
+
+# VariantBenchmarks tasks (supervised variant effect)
+from .variant_benchmarks_coding_task import VariantBenchmarksCodingTask
+from .variant_benchmarks_non_coding_task import VariantBenchmarksNonCodingTask
+from .variant_benchmarks_expression_task import VariantBenchmarksExpressionTask
+from .variant_benchmarks_common_vs_rare_task import VariantBenchmarksCommonVsRareTask
+from .variant_benchmarks_meqtl_task import VariantBenchmarksMEQTLTask
+from .variant_benchmarks_sqtl_task import VariantBenchmarksSQTLTask
+from .dnaongbench_eqtl_task import DNALongBenchEqtlTask
+from .dnaongbench_enhancer_target_gene_task import DNALongBenchEnhancerTargetGeneTask
+
+__all__ = [
+    # GUE tasks
+    "GuePromoterAllTask",
+    "GueSpliceSiteTask",
+    "GueTranscriptionFactorTask",
+    # BEND tasks
+    "BendVEPExpression",
+    "BendVEPDisease",
+    # LRB tasks
+    "LrbVariantEffectPathogenicOmimTask",
+    "LrbVariantEffectPathogenicClinvarTask",
+    "LrbVariantEffectPathogenicClinvarSupervisedTask",
+    "LrbVariantEffectPathogenicClinvarZeroShotTask",
+    "LRBCausalEqtlTask",
+    "LRBCausalEqtlSupervisedTask",
+    "LRBCausalEqtlZeroShotTask",
+    # TraitGym tasks
+    "TraitGymComplexTask",
+    "TraitGymMendelianTask",
+    # VariantBenchmarks tasks
+    "VariantBenchmarksCodingTask",
+    "VariantBenchmarksNonCodingTask",
+    "VariantBenchmarksExpressionTask",
+    "VariantBenchmarksCommonVsRareTask",
+    "VariantBenchmarksMEQTLTask",
+    "VariantBenchmarksSQTLTask",
+    "DNALongBenchEqtlTask",
+    "DNALongBenchEnhancerTargetGeneTask",
+]

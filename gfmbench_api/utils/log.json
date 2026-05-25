@@ -1,0 +1,71 @@
+{
+  "version": 1,
+  "disable_existing_loggers": false,
+  "formatters": {
+    "detailed": {
+      "format": "[%(asctime)s] [%(levelname)-8s] [%(name)s] [%(filename)s:%(lineno)d] [%(funcName)s()] - %(message)s",
+      "datefmt": "%Y-%m-%d %H:%M:%S"
+    },
+    "simple": {
+      "format": "[%(asctime)s] [%(levelname)-8s] - %(message)s",
+      "datefmt": "%Y-%m-%d %H:%M:%S"
+    },
+    "console": {
+      "format": "[%(levelname)-8s] [%(name)s] - %(message)s"
+    },
+    "json": {
+      "format": "%(asctime)s %(levelname)s %(name)s %(filename)s %(lineno)d %(funcName)s %(message)s",
+      "datefmt": "%Y-%m-%d %H:%M:%S"
+    },
+    "debug": {
+      "format": "[%(asctime)s] [%(levelname)-8s] [%(process)d:%(thread)d] [%(name)s] [%(filename)s:%(lineno)d] [%(funcName)s()] - %(message)s",
+      "datefmt": "%Y-%m-%d %H:%M:%S.%f"
+    }
+  },
+  "handlers": {
+    "console_handler": {
+      "level": "INFO",
+      "formatter": "console",
+      "class": "logging.StreamHandler",
+      "stream": "ext://sys.stdout"
+    },
+    "file_handler": {
+      "level": "DEBUG",
+      "formatter": "detailed",
+      "class": "logging.FileHandler",
+      "filename": "gfmbench_pipeline.log",
+      "mode": "w"
+    }
+  },
+  "loggers": {
+    "gfmbench": {
+      "handlers": ["console_handler", "file_handler"],
+      "level": "DEBUG",
+      "propagate": false
+    },
+    "gfmbench.trainers": {
+      "handlers": ["file_handler"],
+      "level": "DEBUG",
+      "propagate": false
+    },
+    "PIL": {
+      "handlers": ["file_handler"],
+      "level": "WARNING",
+      "propagate": false
+    },
+    "matplotlib": {
+      "handlers": ["file_handler"],
+      "level": "WARNING",
+      "propagate": false
+    },
+    "urllib3": {
+      "handlers": ["file_handler"],
+      "level": "WARNING",
+      "propagate": false
+    }
+  },
+  "root": {
+    "level": "INFO",
+    "handlers": ["console_handler", "file_handler"]
+  }
+}
