@@ -22,8 +22,8 @@ import pandas as pd
 import pyfaidx
 import tabix
 
-from gfmbench_api.tasks.base.base_gfm_supervised_single_seq_linear_probe_task import (
-    BaseGFMSupervisedSingleSeqLinearProbeTask,
+from gfmbench_api.tasks.base.base_gfm_supervised_single_seq_task import (
+    BaseGFMSupervisedSingleSeqTask,
 )
 
 
@@ -193,8 +193,8 @@ def _resolve_enhancer_target_gene_root(
     return os.path.join(root_data_dir_path, "enhancer_target_gene")
 
 
-class DNALongBenchEnhancerTargetGeneTask(BaseGFMSupervisedSingleSeqLinearProbeTask):
-    """DNALongBench enhancer-target-gene prediction with embedding linear probing."""
+class DNALongBenchEnhancerTargetGeneTask(BaseGFMSupervisedSingleSeqTask):
+    """DNALongBench enhancer-target-gene prediction as supervised sequence classification."""
 
     def __init__(self, root_data_dir_path: str, task_config: Optional[Dict[str, Any]] = None):
         self._cfg = task_config or {}
