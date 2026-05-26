@@ -47,6 +47,12 @@ from gfmbench_api.tasks.concrete import (
     BendVEPDisease,
     # LRB tasks
     LrbVariantEffectPathogenicOmimTask,
+    LrbVariantEffectPathogenicClinvarTask,
+    LrbVariantEffectPathogenicClinvarSupervisedTask,
+    LrbVariantEffectPathogenicClinvarZeroShotTask,
+    LRBCausalEqtlTask,
+    LRBCausalEqtlSupervisedTask,
+    LRBCausalEqtlZeroShotTask,
     # TraitGym tasks
     TraitGymComplexTask,
     TraitGymMendelianTask,
@@ -57,6 +63,8 @@ from gfmbench_api.tasks.concrete import (
     VariantBenchmarksCommonVsRareTask,
     VariantBenchmarksMEQTLTask,
     VariantBenchmarksSQTLTask,
+    DNALongBenchEqtlTask,
+    DNALongBenchEnhancerTargetGeneTask,
 )
 
 __all__ = [
@@ -80,6 +88,12 @@ __all__ = [
     "BendVEPDisease",
     # LRB tasks
     "LrbVariantEffectPathogenicOmimTask",
+    "LrbVariantEffectPathogenicClinvarTask",
+    "LrbVariantEffectPathogenicClinvarSupervisedTask",
+    "LrbVariantEffectPathogenicClinvarZeroShotTask",
+    "LRBCausalEqtlTask",
+    "LRBCausalEqtlSupervisedTask",
+    "LRBCausalEqtlZeroShotTask",
     # TraitGym tasks
     "TraitGymComplexTask",
     "TraitGymMendelianTask",
@@ -90,4 +104,6 @@ __all__ = [
     "VariantBenchmarksCommonVsRareTask",
     "VariantBenchmarksMEQTLTask",
     "VariantBenchmarksSQTLTask",
+    "DNALongBenchEqtlTask",
+    "DNALongBenchEnhancerTargetGeneTask",
 ]

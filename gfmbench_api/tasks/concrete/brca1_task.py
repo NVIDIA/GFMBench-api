@@ -20,8 +20,17 @@ import os
 from typing import Any, Dict, Optional, List
 import pandas as pd
 import torch
+from torch.utils.data import DataLoader
+from tqdm.auto import tqdm
 from gfmbench_api.tasks.base.base_gfm_zeroshot_snv_task import BaseGFMZeroShotSNVTask
-from gfmbench_api.metrics import SNVVariantEffectPredictionLLRAUROC
+from gfmbench_api.metrics import (
+    SequenceEmbeddingsCosineSimAUPRC,
+    SequenceEmbeddingsCosineSimAUROC,
+    SequenceEmbeddingsL2AUPRC,
+    SequenceEmbeddingsL2AUROC,
+    SumProbsLLRAUPRC,
+    SumProbsLLRAUROC,
+)
 from gfmbench_api.utils.fileutils import download_file_from_url
 from gfmbench_api.utils.preprocutils import pad_sequence_centered_variant
 import glob
@@ -59,15 +68,86 @@ class BRCA1Task(BaseGFMZeroShotSNVTask):
         self.reference_genome_path = os.path.join(root_data_dir_path, self.get_task_name(), "GRCh37.p13_chr17.fna")
 
         cfg = task_config or {}
-        self.max_samples = cfg.get("max_samples", None)
+        self.max_samples = cfg.get("max_num_samples", None)
 
         super().__init__(root_data_dir_path, task_config)
     
     def _get_default_max_seq_len(self) -> int:
-        return 1048576
+        # return 1048576
+        return 8388608
     
     def get_task_name(self):
         return "brca1" 
+
+    def _eval_dataset(self, model: Any, dataset: Any) -> Dict[str, Optional[float]]:
+        """Evaluate BRCA1 with sample-level tqdm progress and ETA."""
+        data_loader = DataLoader(dataset, batch_size=self.batch_size, shuffle=False)
+
+        common_metrics = [
+            (SumProbsLLRAUROC(), ('variant_probs', 'reference_probs', 'labels')),
+            (SumProbsLLRAUPRC(), ('variant_probs', 'reference_probs', 'labels')),
+            (SequenceEmbeddingsCosineSimAUROC(), ('variant_repr', 'reference_repr', 'labels')),
+            (SequenceEmbeddingsCosineSimAUPRC(), ('variant_repr', 'reference_repr', 'labels')),
+            (SequenceEmbeddingsL2AUROC(), ('variant_repr', 'reference_repr', 'labels')),
+            (SequenceEmbeddingsL2AUPRC(), ('variant_repr', 'reference_repr', 'labels')),
+        ]
+        additional_metrics = self._get_additional_metrics()
+
+        total_samples = len(dataset) if hasattr(dataset, "__len__") else None
+        disable_tqdm = os.environ.get("TQDM_DISABLE", "").lower() in {"1", "true", "yes"}
+        progress = tqdm(
+            total=total_samples,
+            desc="Evaluating BRCA1",
+            unit="sample",
+            dynamic_ncols=True,
+            disable=disable_tqdm,
+        )
+
+        try:
+            for batch_data in data_loader:
+                variant_sequences, reference_sequences, labels, conditional_input = batch_data
+
+                variant_probs_np, variant_embeddings_np, variant_repr_np = self._safe_model_call(
+                    model, 'infer_sequence_to_sequence', variant_sequences, conditional_input, num_outputs=3
+                )
+                reference_probs_np, reference_embeddings_np, reference_repr_np = self._safe_model_call(
+                    model, 'infer_sequence_to_sequence', reference_sequences, conditional_input, num_outputs=3
+                )
+
+                outputs = {
+                    'variant_probs': variant_probs_np,
+                    'reference_probs': reference_probs_np,
+                    'variant_embeddings': variant_embeddings_np,
+                    'reference_embeddings': reference_embeddings_np,
+                    'variant_repr': variant_repr_np,
+                    'reference_repr': reference_repr_np,
+                    'labels': labels,
+                }
+
+                for metric, arg_keys in common_metrics:
+                    args = [outputs[key] for key in arg_keys]
+                    metric.calc(*args)
+
+                self._update_additional_metrics(
+                    additional_metrics, model,
+                    variant_sequences, reference_sequences, labels,
+                    outputs
+                )
+
+                try:
+                    progress.update(len(variant_sequences))
+                except TypeError:
+                    progress.update(1)
+        finally:
+            progress.close()
+
+        results = {}
+        for metric, _ in common_metrics:
+            results[metric.name] = metric.get_final_results()
+        for metric, _ in additional_metrics:
+            results[metric.name] = metric.get_final_results()
+
+        return results
     
     def _create_test_dataset(self):
         try:

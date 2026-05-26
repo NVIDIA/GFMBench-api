@@ -58,7 +58,7 @@ class BendVEPExpression(BaseGFMZeroShotSNVTask):
     
     def _get_default_max_seq_len(self) -> int:
         """Return task's default maximum sequence length (1048576bp)."""
-        return 512
+        return 1048576
     
     
     def get_task_name(self):

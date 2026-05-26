@@ -52,6 +52,7 @@ from gfmbench_api.tasks.concrete.variant_benchmarks_sqtl_task import VariantBenc
 from usage_examples.trainers import GFMFinetuner
 from usage_examples.sanity_models.dna_bert2_model import DNABERT2Model
 from usage_examples.sanity_models.dna_bert_model import DNABERTModel
+from usage_examples.sanity_models.evo2_model import Evo2BioNeMoModel
 from gfmbench_api.tasks.concrete.brca1_task import BRCA1Task
 from gfmbench_api.tasks.concrete.clinvar_vepeval_task import VepevalClinvarTask
 from gfmbench_api.tasks.concrete.clinvar_indel_task import IndelClinvarTask
@@ -61,6 +62,7 @@ from gfmbench_api.tasks.concrete.loleve_causal_eqtl_task import LoleveCausalEqtl
 MODEL_REGISTRY = {
     "DNABERT2": {"class": DNABERT2Model, "max_length": 2500},
     "DNABERT": {"class": DNABERTModel, "max_length": 500},
+    "Evo2": {"class": Evo2BioNeMoModel, "max_length": 8192},
 }
 
 
@@ -69,6 +71,7 @@ def parse_args():
     parser.add_argument(
         "--csv_path",
         type=str,
+        required=True,
         help="CSV path for the benchmark report (loads existing if present, saves here)"
     )
     parser.add_argument(
@@ -114,6 +117,13 @@ def parse_args():
         action="store_true",
         help="If set, model methods are called directly without try-except wrapper, "
              "allowing exceptions to propagate for debugging."
+    )
+    
+    parser.add_argument(
+        '--root_data_dir_path',
+        type=str,
+        required=True,
+        help="Root data directory path. Datasets will be downloaded to this directory"
     )
     return parser.parse_args()
 
@@ -176,7 +186,7 @@ def main():
     sanity_check_mode = False  # Set to True for quick testing with 100 samples
     
     # Path to the root data directory
-    root_data_dir_path = "/path/to/your/root/data/directory"
+    root_data_dir_path = args.root_data_dir_path
     
     # CSV path for the benchmark report (loads existing if present, saves here)
     csv_path = args.csv_path
@@ -196,6 +206,11 @@ def main():
         raise ValueError(f"Unknown model: {args.model}. Supported models: {list(MODEL_REGISTRY.keys())}")
     ModelClass = MODEL_REGISTRY[args.model]["class"]
     max_length = MODEL_REGISTRY[args.model]["max_length"]
+    force_linear_probe = bool(
+        MODEL_REGISTRY[args.model].get("force_linear_probe", False)
+        or getattr(ModelClass, "force_linear_probe", False)
+        or not getattr(ModelClass, "supports_backbone_finetuning", True)
+    )
     
     logging.info(f"Model: {args.model}, Max sequence length: {max_length}")
     
@@ -212,7 +227,7 @@ def main():
     task_config = {
         "max_sequence_length": max_length,
         "batch_size": 16,
-        "max_num_samples": None,
+        "max_num_samples": 256,
         "disable_safe_model_call": args.disable_safe_model_call,
     }
     
@@ -251,13 +266,17 @@ def main():
         "lr": 3e-5,
         "optimizer": "AdamW",
         "weight_decay": 0.01,
-        "only_proj_layer": args.linear_prob,
+        "only_proj_layer": args.linear_prob or force_linear_probe,
         "batch_size": 8,
     }
 
     logging.info(f"********* Number of tasks: {len(tasks)} *********")
     logging.info(f"Model: {args.model}")
-    logging.info(f"Training mode: {'Linear Probing' if args.linear_prob else 'Full Fine-tuning'}")
+    if force_linear_probe and not args.linear_prob:
+        logging.info("Model requires a frozen backbone; forcing linear-probe training.")
+    logging.info(
+        f"Training mode: {'Linear Probing' if training_params['only_proj_layer'] else 'Full Fine-tuning'}"
+    )
     logging.info(f"Fine-tuning epochs: {args.epochs}")
 
     # Run each task

@@ -1,463 +1,328 @@
-# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
-# SPDX-License-Identifier: Apache-2.0
-#
-# Licensed under the Apache License, Version 2.0 (the "License");
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-# http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an "AS IS" BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
+"""GFM-Bench adapter for BioNeMo Evo2.
 
-# This module does not embed third-party data download URLs.
-"""Standalone Evo2 model wrapper for inference using native NeMo inference API.
+Loads an Evo2 checkpoint using ``bionemo.core.data.load`` (handles NGC
+download + caching) and NeMo's ``io.load_context`` (rebuilds the exact
+model config stored alongside the checkpoint).  Then exposes the
+duck-typed interface that GFM-Bench tasks expect.
 
-This module provides a wrapper around Evo2 that uses the NeMo inference API directly,
-avoiding subprocess spawning and file I/O. The model is loaded once and cached for
-efficient repeated inference.
+Notebook-compatible: initialises Megatron parallel state manually
+instead of going through the NeMo Trainer.
+
+Available checkpoint tags (pass as ``ckpt_tag``):
+    evo2/1b-8k-bf16:1.0   — 1B params, 8K context, bf16
+    evo2/1b-8k:1.0         — 1B params, 8K context, fp8
+    evo2/7b-8k:1.0         — 7B params, 8K context
+    evo2/7b-1m:1.0         — 7B params, 1M context
 """
 
-import tempfile
+from __future__ import annotations
+
+import logging
+import os
 from pathlib import Path
-from typing import List, Optional, Tuple
+from typing import Any, Optional, Sequence
 
 import numpy as np
 import torch
-import nemo.lightning as nl
-from nemo.collections.llm import inference
-from nemo.collections.llm.gpt.model.hyena import HYENA_MODEL_OPTIONS
-from megatron.core.inference.common_inference_params import CommonInferenceParams
-from bionemo.llm.utils.callbacks import PredictionWriter
-from bionemo.testing.megatron_parallel_state_utils import clean_parallel_state_context
+import torch.distributed as dist
+import torch.nn.functional as F
 
-from gfmbench_api.tasks.base.base_gfm_model import BaseGFMModel
+from megatron.core import parallel_state
+from megatron.core.tensor_parallel.random import model_parallel_cuda_manual_seed
+from megatron.core.dist_checkpointing import load as dist_ckpt_load
+from megatron.core.dist_checkpointing.strategies.torch import TorchDistLoadShardedStrategy
+
+logger = logging.getLogger(__name__)
 
 
-class Evo2Model(BaseGFMModel):
-    """Evo2 model wrapper using native NeMo inference API.
-    
-    This class uses the NeMo inference.setup_model_and_tokenizer and inference.generate
-    APIs directly for efficient in-process inference without subprocess spawning.
+# ---------------------------------------------------------------------------
+# Megatron init (single-GPU, notebook-safe)
+# ---------------------------------------------------------------------------
+
+def _ensure_megatron_initialized() -> None:
+    os.environ.setdefault("MASTER_ADDR", "localhost")
+    os.environ.setdefault("MASTER_PORT", "29500")
+    if not dist.is_initialized():
+        dist.init_process_group(backend="nccl", world_size=1, rank=0)
+    if not parallel_state.is_initialized():
+        parallel_state.initialize_model_parallel(
+            tensor_model_parallel_size=1, pipeline_model_parallel_size=1,
+        )
+    model_parallel_cuda_manual_seed(42)
+
+
+# ---------------------------------------------------------------------------
+# Model wrapper
+# ---------------------------------------------------------------------------
+
+class Evo2BioNeMoModel:
+    """BioNeMo Evo2 → GFM-Bench adapter.
+
+    Parameters
+    ----------
+    ckpt_tag : str
+        A BioNeMo resource tag such as ``"evo2/1b-8k-bf16:1.0"`` or
+        ``"evo2/7b-8k:1.0"``.  ``bionemo.core.data.load`` downloads and
+        caches the NeMo2 checkpoint from NGC automatically.
+        Alternatively, a local directory path to an already-extracted
+        NeMo2 checkpoint.
+    max_length : int
+        Maximum token length for inference (sequences are truncated).
     """
-    
+
+    force_linear_probe = True
+    supports_backbone_finetuning = False
+
     def __init__(
         self,
-        device: str = 'cuda:0',
-        model_size: str = "1b",
-        checkpoint_path: Optional[str] = None,
-        work_dir: Optional[Path] = None,
-        num_nodes: int = 1,
-        tensor_parallel_size: int = 1,
-        pipeline_model_parallel_size: int = 1,
-        context_parallel_size: int = 1,
-    ):
-        """Initialize the Evo2 model.
-        
-        Args:
-            device: Device to use for inference (e.g., 'cuda:0', 'cuda:1').
-            model_size: Model size configuration. Options: '1b', '7b', etc.
-            checkpoint_path: Path to NeMo2 checkpoint directory.
-            work_dir: Working directory for temporary files.
-            num_nodes: Number of nodes for distributed inference.
-            tensor_parallel_size: Tensor parallel size.
-            pipeline_model_parallel_size: Pipeline parallel size.
-            context_parallel_size: Context parallel size.
-        """
-        self.device = device
-        self.model_size = model_size
-        self.checkpoint_path = checkpoint_path
-        self._work_dir = work_dir or Path(tempfile.mkdtemp())
-        
-        # Extract device ID from device string
-        if 'cuda:' in device:
-            self.device_id = str(device.split(':')[1])
-        else:
-            self.device_id = '0'
-        
-        # Parallelism settings
-        self.num_nodes = num_nodes
-        self.tensor_parallel_size = tensor_parallel_size
-        self.pipeline_model_parallel_size = pipeline_model_parallel_size
-        self.context_parallel_size = context_parallel_size
-        
-        # Hidden dimension based on model size
-        self._hidden_dims = {
-            "1b": 1920,
-            "7b": 4096,
-            "7b_arc_longcontext": 4096,
-            "40b": 8192,
-        }
-        self.hidden_dim = self._hidden_dims.get(model_size, 1920)
-        
-        # Cached model components (loaded lazily)
-        self._trainer = None
-        self._inference_model = None
-        self._tokenizer = None
-        self._is_loaded = False
-        
-        # Inference parameters
-        self.temperature = 1.0
-        self.top_k = 0
-        self.top_p = 0.0
-        self.random_seed = 42
-    
-    def _ensure_model_loaded(self):
-        """Ensure the model is loaded. Load it if not already loaded."""
-        if self._is_loaded:
-            return
-        
-        if self.checkpoint_path is None:
-            raise ValueError("checkpoint_path must be set before inference. Call load_checkpoint() first.")
-        
-        # Create trainer
-        output_dir = self._work_dir / "output"
-        output_dir.mkdir(parents=True, exist_ok=True)
-        
-        self._trainer = nl.Trainer(
-            accelerator="gpu",
-            num_nodes=self.num_nodes,
-            devices=self.device_id,
-            strategy=nl.MegatronStrategy(
-                drop_last_batch=False,
-                tensor_model_parallel_size=self.tensor_parallel_size,
-                pipeline_model_parallel_size=self.pipeline_model_parallel_size,
-                context_parallel_size=self.context_parallel_size,
-                pipeline_dtype=torch.bfloat16,
-                data_parallel_size=1,
-                ckpt_load_optimizer=False,
-                ckpt_save_optimizer=False,
-                ckpt_async_save=False,
-                sequence_parallel=False,
-                save_ckpt_format='torch_dist',
-                ckpt_load_strictness="log_all",
-            ),
-            log_every_n_steps=1,
-            limit_val_batches=10,
-            num_sanity_val_steps=0,
-            callbacks=[
-                PredictionWriter(
-                    output_dir=output_dir,
-                    write_interval="epoch",
-                    batch_dim_key_defaults={"token_logits": 0},
-                    seq_dim_key_defaults={"token_logits": 1},
-                    files_per_subdir=None,
-                    save_all_model_parallel_ranks=False,
-                )
-            ],
-            plugins=nl.MegatronMixedPrecision(
-                precision="bf16-mixed",
-                params_dtype=torch.bfloat16,
-                fp8=None,
-                fp8_amax_history_len=1,
-                fp8_amax_compute_algo="most_recent",
-            ),
+        ckpt_tag: str = "evo2/1b-8k-bf16:1.0",
+        max_length: int = 8192,
+        device: str = "cuda",
+    ) -> None:
+        self.max_length = max_length
+        self.device = torch.device(device)
+        if self.device.type != "cuda":
+            raise ValueError("Evo2BioNeMoModel requires a CUDA device.")
+
+        # ── 1. Megatron init ──────────────────────────────────────────────
+        _ensure_megatron_initialized()
+
+        # ── 2. Resolve checkpoint path ────────────────────────────────────
+        ckpt_root = Path(ckpt_tag)
+        if not ckpt_root.is_dir():
+            from bionemo.core.data.load import load
+            logger.info("Downloading/caching checkpoint: %s", ckpt_tag)
+            ckpt_root = load(ckpt_tag)
+        logger.info("Checkpoint root: %s", ckpt_root)
+
+        # ── 3. Rebuild model from checkpoint config ───────────────────────
+        from nemo.lightning import io as nemo_io
+        from nemo.collections.nlp.modules.common.tokenizer_utils import get_nmt_tokenizer
+
+        nemo_model = nemo_io.load_context(path=ckpt_root / "context", subpath="model")
+        nemo_model.configure_model()  # creates nemo_model.module (the Megatron-Core model)
+        self.model = nemo_model.module
+        self.model = self.model.to(self.device).bfloat16().eval()
+
+        self.hidden_size = nemo_model.config.hidden_size
+        self.hidden_dim = self.hidden_size
+
+        self.tokenizer = get_nmt_tokenizer("byte-level")
+        self.vocab_size = self.tokenizer.vocab_size
+
+        n_params = sum(p.numel() for p in self.model.parameters())
+        logger.info("Model created: %s parameters, hidden=%d", f"{n_params:,}", self.hidden_size)
+
+        # ── 4. Load checkpoint weights ────────────────────────────────────
+        #   NeMo2 checkpoints store keys with "module." prefix
+        sd = self.model.sharded_state_dict(prefix="module.")
+        loaded = dist_ckpt_load(
+            sd, str(ckpt_root / "weights"),
+            sharded_strategy=TorchDistLoadShardedStrategy(),
         )
-        
-        # Setup model and tokenizer using NeMo inference API
-        self._inference_model, self._tokenizer = inference.setup_model_and_tokenizer(
-            path=Path(self.checkpoint_path),
-            trainer=self._trainer,
-            params_dtype=torch.bfloat16,
-            inference_batch_times_seqlen_threshold=1000,
-            enable_flash_decode=False,
+        if isinstance(loaded, tuple):
+            loaded = loaded[0]
+        self.model.load_state_dict(loaded, strict=False)
+        self._freeze_backbone()
+        logger.info("Checkpoint loaded successfully")
+
+        # ── 5. Embedding hook (captures hidden states before lm_head) ─────
+        #   Verified shapes: logits → [B,T,V], hidden → [T,B,H]
+        self._last_hidden: torch.Tensor | None = None
+        self.model.output_layer.register_forward_pre_hook(
+            lambda _mod, args: setattr(self, "_last_hidden", args[0])
         )
-        
-        self._is_loaded = True
-        print(f"Model loaded from {self.checkpoint_path}")
-    
-    def _run_inference(
-        self,
-        sequences: List[str],
-        max_new_tokens: int = 1,
-        return_log_probs: bool = True,
-    ) -> List:
-        """Run inference on sequences using NeMo generate API.
-        
-        Args:
-            sequences: List of DNA sequences.
-            max_new_tokens: Maximum number of tokens to generate.
-            return_log_probs: Whether to return log probabilities.
-            
-        Returns:
-            List of InferenceRequest objects with results.
-        """
-        self._ensure_model_loaded()
-        
-        # Create inference parameters
-        inference_params = CommonInferenceParams(
-            self.temperature,
-            self.top_k,
-            self.top_p,
-            return_log_probs=return_log_probs,
-            num_tokens_to_generate=max_new_tokens,
-        )
-        
-        # Calculate max sequence length needed
-        max_prompt_len = max(len(self._tokenizer.tokenize(seq)) for seq in sequences)
-        # max_seq_length = inference_params.num_tokens_to_generate + max_prompt_len
-        max_seq_length = max_prompt_len
-        
-        # Set KV cache allocation
-        self._inference_model.inference_wrapper_config.inference_max_seq_length = max_seq_length
-        self._inference_model.inference_context.max_sequence_length = max_seq_length
-        
-        
-        inference_params.num_tokens_to_generate=0
-        
-        # Run generation
-        results = inference.generate(
-            model=self._inference_model,
-            tokenizer=self._tokenizer,
-            prompts=sequences,
-            encoder_prompts=None,
-            add_BOS=False,
-            max_batch_size=len(sequences),
-            random_seed=self.random_seed,
-            inference_params=inference_params,
-        )
-        
-        return results
-    
-    def _compute_sequence_log_probs(
-        self, 
-        sequences: List[str], 
-        collapse: str = "mean"
-    ) -> np.ndarray:
-        """Compute log probabilities for sequences.
-        
-        For autoregressive models, we compute the log probability of each token
-        in the sequence given the previous tokens.
-        
-        Args:
-            sequences: List of DNA sequences.
-            collapse: How to collapse per-token log probs ('mean', 'sum', 'none').
-            
-        Returns:
-            Array of log probabilities for each sequence.
-            If collapse='none', returns list of arrays.
-        """
-        self._ensure_model_loaded()
-        
-        # Run inference with return_log_probs=True
-        results = self._run_inference(sequences, max_new_tokens=1, return_log_probs=True)
-        
-        # Extract log probabilities from InferenceRequest objects
-        if collapse == "none":
-            # Return per-token log probs
-            all_log_probs = []
-            for req in results:
-                if req.prompt_log_probs is not None:
-                    all_log_probs.append(np.array(req.prompt_log_probs))
-                else:
-                    all_log_probs.append(np.zeros(len(req.prompt_tokens)))
-            return all_log_probs
-        else:
-            # Collapse to single value per sequence
-            log_probs = []
-            for req in results:
-                if req.prompt_log_probs is not None:
-                    seq_log_probs = np.array(req.prompt_log_probs)
-                    if collapse == "mean":
-                        log_probs.append(float(np.mean(seq_log_probs)))
-                    elif collapse == "sum":
-                        log_probs.append(float(np.sum(seq_log_probs)))
-                    else:
-                        raise ValueError(f"Unknown collapse method: {collapse}")
-                else:
-                    log_probs.append(0.0)
-            
-            return np.array(log_probs)
-        
-    def infer_variant_ref_sequences_to_labels_probs(self, variant_sequences: List[str], ref_sequences: List[str]) -> np.ndarray:
-        """Get label probabilities for variant and reference sequences.
-        
-        Args:
-            variant_sequences: List of variant sequences.
-            ref_sequences: List of reference sequences.
-            
-        Returns:
-            Array of label probabilities for variant and reference sequences.
-        """
-        return None
-    
-    def load_checkpoint(self, checkpoint_path: str) -> "Evo2Model":
-        """Set the checkpoint path and trigger model loading.
-        
-        Args:
-            checkpoint_path: Path to NeMo2 checkpoint directory.
-            
-        Returns:
-            self for method chaining.
-        """
-        self.checkpoint_path = checkpoint_path
-        self._is_loaded = False  # Reset so model gets reloaded
-        return self
-    
-    def eval(self) -> "Evo2Model":
-        """Set model to evaluation mode."""
-        self._ensure_model_loaded()
-        return self
-    
-    def train(self, mode: bool = True) -> "Evo2Model":
-        """Set model training mode."""
-        return self
-    
-    def to(self, device: str) -> "Evo2Model":
-        """Move model to specified device (requires reload)."""
-        self.device = device
-        if 'cuda:' in device:
-            self.device_id = str(device.split(':')[1])
-        self._is_loaded = False  # Force reload on new device
-        return self
-    
-    def get_hidden_dim(self) -> int:
-        """Get the hidden dimension of the model."""
-        return self.hidden_dim
-    
-    def parameters(self):
-        """Get model parameters."""
-        self._ensure_model_loaded()
-        return self._inference_model.model.parameters()
-    
+
+    def _freeze_backbone(self) -> None:
+        """Evo2 is used as a frozen feature extractor; only external heads train."""
+        for param in self.model.parameters():
+            param.requires_grad_(False)
+        self.model.eval()
+
+    # ------------------------------------------------------------------
+    # Low-level forward
+    # ------------------------------------------------------------------
+
+    def _forward(self, sequences: Sequence[str], require_grad: bool = False):
+        """Batched forward.  Returns logits [B,T,V], embeddings [B,T,H], mask [B,T], token_ids."""
+        token_ids = [self.tokenizer.text_to_ids(s)[:self.max_length] for s in sequences]
+        T = max(len(ids) for ids in token_ids)
+        B = len(sequences)
+
+        input_ids = torch.zeros(B, T, dtype=torch.long, device=self.device)
+        mask = torch.zeros(B, T, dtype=torch.bool, device=self.device)
+        for i, ids in enumerate(token_ids):
+            n = len(ids)
+            input_ids[i, :n] = torch.as_tensor(ids, dtype=torch.long, device=self.device)
+            mask[i, :n] = True
+        position_ids = torch.arange(T, dtype=torch.long, device=self.device).unsqueeze(0).expand(B, -1)
+
+        grad_context = torch.enable_grad() if require_grad else torch.no_grad()
+        with grad_context:
+            self._last_hidden = None
+            logits = self.model(input_ids=input_ids, position_ids=position_ids, attention_mask=None).float()
+            if not require_grad:
+                logits.nan_to_num_(nan=0.0, posinf=80.0, neginf=-80.0)
+
+            embeddings = None
+            if self._last_hidden is not None:
+                embeddings = self._last_hidden.permute(1, 0, 2).float()  # [T,B,H] → [B,T,H]
+                if not require_grad:
+                    embeddings.nan_to_num_(nan=0.0, posinf=0.0, neginf=0.0)
+
+        return logits, embeddings, mask, token_ids
+
+    def _score(self, logits, input_ids_padded, mask):
+        """Shifted autoregressive token probs → [B,T] clamped to [0,1]."""
+        B, T, V = logits.shape
+        log_p = F.log_softmax(logits, dim=-1)
+        lp = torch.full((B, T), -float(np.log(V)), device=logits.device)
+        lp[:, 1:] = log_p[:, :-1].gather(2, input_ids_padded[:, 1:].unsqueeze(-1)).squeeze(-1)
+        return lp.exp().clamp(0.0, 1.0) * mask.float()
+
+    # ------------------------------------------------------------------
+    # GFM-Bench API
+    # ------------------------------------------------------------------
+
     def infer_sequence_to_sequence(
-        self, sequences: List[str],
-        conditional_input: Optional[np.ndarray] = None
-    ) -> Tuple[Optional[np.ndarray], Optional[np.ndarray], Optional[np.ndarray]]:
-        """Get sequence-level outputs for zero-shot benchmarks.
-        
-        For Evo2 (autoregressive model), returns per-token probabilities.
-        """
-        self._ensure_model_loaded()
-        
-        # Run inference
-        results = self._run_inference(sequences, max_new_tokens=1, return_log_probs=True)
-        
-        # Extract per-token probabilities from prompt_log_probs
-        all_probs = []
-        for req in results:
-            if req.prompt_log_probs is not None:
-                log_probs = np.array(req.prompt_log_probs)
-                probs = np.exp(log_probs)
-                all_probs.append(probs)
-            else:
-                # Fallback: uniform probabilities
-                all_probs.append(np.ones(len(req.prompt_tokens)) * 0.25)
-        
-        # Pad to same length
-        max_len = max(len(p) for p in all_probs)
-        padded_probs = np.zeros((len(sequences), max_len))
-        for i, probs in enumerate(all_probs):
-            padded_probs[i, :len(probs)] = probs
-        
-        return padded_probs, None, None
-    
-    def infer_sequence_log_prob(self, sequences: List[str], collapse: str = "mean") -> np.ndarray:
-        """Get log probability of sequences.
-        
-        Args:
-            sequences: List of DNA sequences.
-            collapse: How to collapse per-token log probs ('mean', 'sum').
-            
-        Returns:
-            Array of log probabilities.
-        """
-        return self._compute_sequence_log_probs(sequences, collapse=collapse)
-    
-    def sequence_pos_to_prob_pos(self, sequences: List[str], pos: int) -> np.ndarray:
-        """Map input sequence position to output probability position.
-        
-        For autoregressive models with byte-level tokenizer, the prompt_log_probs
-        has length (seq_len - 1) because it gives P(token[i] | tokens[0:i]).
-        So position i in the sequence corresponds to index i-1 in prompt_log_probs.
-        """
-        # prompt_log_probs[i] = log P(token[i+1] | tokens[0:i+1])
-        # So for position pos, we need index pos-1 (or 0 if pos is 0)
-        return np.array([max(0, pos - 1)] * len(sequences))
-    
-    def infer_sequence_to_labels_probs(self, sequences: List[str]) -> Optional[np.ndarray]:
-        """Get label probabilities for sequences (not implemented for Evo2)."""
+        self, sequences: Sequence[str], conditional_input: Any = None,
+    ) -> tuple[np.ndarray | None, np.ndarray | None, np.ndarray | None]:
+        sequences = [str(s) for s in sequences]
+        logits, embeddings, mask, token_ids = self._forward(sequences)
+        B, T, V = logits.shape
+
+        input_ids = torch.zeros(B, T, dtype=torch.long, device=self.device)
+        for i, ids in enumerate(token_ids):
+            input_ids[i, :len(ids)] = torch.as_tensor(ids, dtype=torch.long, device=self.device)
+
+        probs = self._score(logits, input_ids, mask)
+
+        rep = None
+        if embeddings is not None:
+            m = mask.float().unsqueeze(-1)
+            rep = ((embeddings * m).sum(1) / m.sum(1)).cpu().numpy()
+
+        max_len = max(len(ids) for ids in token_ids)
+        probs_np = np.zeros((B, max_len), dtype=np.float32)
+        embs_np = np.zeros((B, max_len, self.hidden_size), dtype=np.float32) if embeddings is not None else None
+        probs_cpu = probs.cpu().numpy()
+        embs_cpu = embeddings.cpu().numpy() if embeddings is not None else None
+        for i, ids in enumerate(token_ids):
+            n = len(ids)
+            probs_np[i, :n] = probs_cpu[i, :n]
+            if embs_cpu is not None:
+                embs_np[i, :n] = embs_cpu[i, :n]
+
+        np.nan_to_num(probs_np, copy=False, nan=0.0, posinf=1.0, neginf=0.0)
+        if embs_np is not None:
+            np.nan_to_num(embs_np, copy=False, nan=0.0, posinf=0.0, neginf=0.0)
+        if rep is not None:
+            np.nan_to_num(rep, copy=False, nan=0.0, posinf=0.0, neginf=0.0)
+        if embs_np is None:
+            raise ValueError("Embeddings are None")
+        if rep is None:
+            raise ValueError("Representative is None")
+        return probs_np, embs_np, rep
+
+    def _sequence_to_representative(self, sequences: Sequence[str]) -> torch.Tensor:
+        """Return representative embeddings as torch tensors for projection training."""
+        sequences = [str(s) for s in sequences]
+        require_grad = self.model.training and torch.is_grad_enabled()
+        _, embeddings, mask, _ = self._forward(sequences, require_grad=require_grad)
+        if embeddings is None:
+            raise ValueError("Embeddings are None")
+
+        m = mask.float().unsqueeze(-1)
+        return (embeddings * m).sum(1) / m.sum(1).clamp_min(1.0)
+
+    def infer_sequence_to_labels_probs(
+        self,
+        sequences: Sequence[str],
+        conditional_input: Any = None,
+    ) -> np.ndarray | None:
+        """Direct sequence classification is not implemented for base Evo2."""
         return None
-    
-    def infer_masked_sequence_to_token_probs(
-        self,
-        sequences: List[str],
-        variant_pos: int,
-        variant_letters: List[str],
-        reference_letters: List[str],
-    ) -> Tuple[Optional[np.ndarray], Optional[np.ndarray]]:
+
+    def infer_variant_ref_sequences_to_labels_probs(
+        self, variant_sequences: Sequence[str], ref_sequences: Sequence[str],
+        conditional_input: Any = None,
+    ) -> np.ndarray | None:
+        var_p = self.infer_sequence_to_sequence(list(variant_sequences))[0]
+        ref_p = self.infer_sequence_to_sequence(list(ref_sequences))[0]
+        if var_p is None or ref_p is None:
+            return None
+        eps = 1e-8
+        var_ll = np.log(np.clip(var_p, eps, 1.0)).sum(axis=1)
+        ref_ll = np.log(np.clip(ref_p, eps, 1.0)).sum(axis=1)
+        llr = np.clip(var_ll - ref_ll, -80, 80).astype(np.float32)
+        p1 = 1.0 / (1.0 + np.exp(-llr))
+        return np.stack([1.0 - p1, p1], axis=1).astype(np.float32)
+
+    def sequence_pos_to_prob_pos(self, sequences: Sequence[str], pos: int) -> np.ndarray:
+        return np.array([pos] * len(sequences))
+
+
+    def infer_masked_sequence_to_token_probs(self, sequences: Sequence[str], variant_pos: int, variant_letters: Sequence[str], reference_letters: Sequence[str], conditional_input: Any = None) -> tuple[np.ndarray, np.ndarray]:
         return None, None
-    
-    def compute_delta_log_likelihood(
-        self,
-        ref_sequences: List[str],
-        var_sequences: List[str],
-    ) -> np.ndarray:
-        """Compute delta log-likelihood between variant and reference sequences.
-        
-        This is the main scoring method used in the BRCA1 benchmark.
-        
-        Args:
-            ref_sequences: List of reference sequences.
-            var_sequences: List of variant sequences.
-            
-        Returns:
-            Array of delta log-likelihoods (var - ref).
-        """
-        ref_log_probs = self.infer_sequence_log_prob(ref_sequences, collapse="mean")
-        var_log_probs = self.infer_sequence_log_prob(var_sequences, collapse="mean")
-        
-        return var_log_probs - ref_log_probs
-    
-    def cleanup(self):
-        """Clean up resources and parallel state."""
-        if self._is_loaded:
-            # Clean up Megatron parallel state if needed
-            try:
-                with clean_parallel_state_context():
-                    pass
-            except Exception:
-                pass
-            self._is_loaded = False
-            self._inference_model = None
-            self._tokenizer = None
-            self._trainer = None
 
+    def eval(self):
+        """Set evaluation mode."""
+        self.model.eval()
+        return self
 
-if __name__ == "__main__":
-    from bionemo.core.data.load import load
-    
-    # Initialize model
-    model = Evo2Model(
-        device="cuda:1",
-        model_size="1b",
-    )
-    
-    # Load checkpoint
-    ckpt_path = load("evo2/1b-8k-bf16:1.0", cache_dir=Path("/efs/elay/evo2_cache"))
-    model.load_checkpoint(str(ckpt_path))
-    model.eval()
-    
-    # Test sequences
-    ref_prompt = "TTAAACACTTTTCAAACCAGGCAATATTTTAGGCCTACTGTATATTTGCATTTTGAGCTTCCAATACGGATAAGTGACTGGAAAAAGCAGCTAGGTTTAGGTTGAAAAACAACAACCCACCGGGGAACACATTTTAGCAAATTCTTCTGAAAGTCAAAAATGTTATAGTCATAGGTAAAAAGTTACAAAGAACTACCAATTGTCAGAAATAGCTGCCAATATTGACTTAGAAGACAGCAGAAGGAATTTTAGTTCAAGAAACCTAAAACAGGCTGAAAACCTTACCTACCCTATAGCTACCACAAATAACACTGTTTCCAGTCATGATCATTCCTGATCACATATTAAGACATAACTGCAAATTGTGCTATACTGTACTATATTAAAAGGAAGTGAAATATGATCCCTATCCTAGAACTTTCCATACAAATGAATGTAAAACACCATAAAAATTAATCTTAAGGCCGGGCGCGGTGGCTCACGCCTGTAATCCCAGCACTTTGGGAGGCCGAGGTGGGCGGATCACGAGGTCAGGAAGTGGAGACCATCCTGGCTAACACGGTGAAACCCCGTCTCTACTAAAAATACAAAAAATTAGCCGGGCGTGGTGGTGGACGCCTGTAGTCCCAGCTACTTGGGGGGCCGAGGCAGGAGAATGGCGTGAACCCGGGAGGCGGAGCTTGCAGTGAGCCGAGATGGCGCCACTGCACTCCGGCCTGGGTGAAAGAGCGAGACTCCGTCTCAAAAACAAAACAAACAAAAATTAATCTTAAGCCAGGCGCAGTGGCTCACGCCAGCACTTTGGAAGGCCGAGGCGGGTGGATCACGAGATCAGGACTTCAAGACCAGCCTGACCAACGTGATGAAACCCTATCTCTACTAAAAATACAAAATTAGCCGGCCACGGTGGCGTGCGCCTATAATCCCAGCTACTCAGGAGGCTGAGGCAGGAGAAGCGCTTGAACTTGAACCTGGCAGGCGGAGGTTGCAGTGAGCCAAGATGGCGCCACTGCACTCCAGCCTGGGCGACAGAGCCAGACTCCAACCCCCCACCCCGAAAAAAAAAGGTCCAGGCCGGGCGCAGTGGCTCAGGACTGTAATCCCAGCACTTTGGAAGGCTGAGGCGGGTGGATCACAAGGTCAGGAGATCGAGACCATCTTGGCTAACATGGTGAAACCCCGTCTCTACTAAAAATACAAAAAATTAGCCGGGCATAGTGGTGGGCGCCTGTAGTCCCAGCTACTCGGGAGGCTGAGGCAGGAGAATGGCCTGAACCCGGGAGGCGGAGCTGGCAGTGAGCCAAGATCGTGCCACTGCACTCCAGCCTAGGCAGCAGAGCGAGACCGTGTCTCAAAAAAACAAAACAAAACAAAACAAAAAGTCTGGGAGCGGTGGCTCACGCCTGTAATCCCAGCACTTTCGGAGGCCAAGGCAGGAGGATCACCTGAGGTCAGGAGTTCGAGACCAACCTGACCAATATGGAGAAACCCTGTCTCTACTAAAAATACAAAATTAGCTGGTGTGATGGCACATGCCTGCAATCCCAGGTACTCCGGAGGCTGAGGCAGCAGAATTGCTTGAACCCGGGAGGTGGAGGTTGTAGTGAGCCGAGATTGTGCCACTGCACTCCAGCCTGGGCAACAAGAGCCAAAGTCTGTCTCAAAAAAAAAAAAAAAAAAAAAAAAAGAAATTAATCTTAACAGGAAACAGAAAAAAGCAATGAAAAGCTAGAAAACATAATAGTTGATTGAAAATAACAATTTAGCATTTTCATTCTTACATCTTTAATTTTTATGTATCTGAGTTTTTAATTGATGGTTTAATTTGCCAGAATGAGAAAGAACATCCTATTTTTATGACTCTCTCCCATGGAAATGAAACATAAATGTATCCAAATGCCACACTATTGAGGATTTTCCTGATCACTGATTGTCATGAGTAAGTTTTGTGCTTTTTCAAAAGCAGTTTTTTCCTACAATGTCATTTCCTGCTTCTCTGGCTCTGATTTTCAATAAATTGATAAATTGTGAATCCTGTTTTCCTCTTATTTTTGTTTAGCTATAATGTTGAAGGGCAAGGGAGAGGATGGTTATTTATAAATCTTGTATCGCTCTGAAAACACAACATACATTTTCCTTAATCTGATTAACTTGACTTCAAATATGAAAAACAACTTTCATAAAGCAGAAAAGAATTTACCCTTTTTTATTGTGGGTAAGAGGCAATGGTACAACTTTTCAACTTATTTTTTGAATGTTACTCACTACTAACCATCACCATATTTAAAAAAATTAAAGAACTAATTTAGTTTAGTTTATTATTTATTTGACAAATGTTTATTGAGTGGCAACTAGGTCCCAAGTACCGTTCTAACTACTGAACATACAGATGTATGTAAACAAAACAAAAATCCCATCCTGGAGTTTACATTCTGTGGGACTAGAGATAAAAAATGGATACATTACATAGAATGTCAGCTAGTAATCAGTGTTATGGAGAAGCAGCAGGAATAGAAGATAAAGTGTGTGCTGGGGGTGTGGTAATTTTAAATAGGGGTGTCTGGAAATGAAAAGGTGGTATTTCAATCAAGATTTTTAGACCATGGCTGGGTGCAATGGCTCAGGCCTGTAATCCCAGCACCTTGAGAGGCCAAGGGAGGGTAGATCACTTGAGGTCAGGAGTTTGAGACCAGCATGGCCAACATAGCAAAACCCTATCTCTACAACAGAAAAATACAAGAATGGCTGGACGCAGTGGCTTATGCCTGTAATCCTAGCACTTTGGGAGGCCCAGGCGGGTGGATCACAAGGTCAGGAGATCAAGACTATCCTGGCTAACACGGTGAAATCCCGCCTCTACTAAAAAAGAAAAAAAAATACAAAAAATTAGCCGGGCGTGGTAGTGGGTGCTTGTAGTCCCAGCTATTCAGGAGGCTCAGGCAGAAGAATGGCATGAACCCGGGAGGCAGAGTTTGCAGTGAGCTGAGATCGCGCCACTGCACTCCAGCCTGGGCAACAGAGCAAGACTCCATCTCAAAAAAAGAAAAAAAAATACAAAAATTAGCTGGGCATGGTGGTGCACACCTATCGTCCCTGCTACTCTGGAGGCTGAGGTGGGAGGATTGCTTGAGCCTGACGAGGTTGAGGCTGCAGTGAGCTGTGATAGCACCACTGCACTCCAGCCTCTCGACAGAGATCCTATATAAAAAAAAAACCTCTGCATTTCATTGTATGTAAATAAGTATGTAATTTCATTGTATGTACAGAGCCAGTTTCAAACAAAGGTTCTTCCAAATACCTATCCTCTCAACGACACCGATCATCCATGTTTTTTTTTTTTTTTTTTTTTTTTTGAGATGGAGTTTAGCTCTGTCGCTGGAGTTCAGTGGTGCCATATTGGCTCACAGCAACATCTGCCTCCTGGTTCAAGTGATTCTCCTGCCTCAGCCTCCTGAGTAGCTGGGATTACAGGCACATGCCACTACGCCCAGCTAATTTTTGTATTTTTAGTGGAGAGGGGGTTTCACCATGTTGGCCAGGATGGTCTCGATCTCCTGACCTCGTGATCCTACCACCTTGGCCTCCCAAAGTGCTGGGATTACAGGCATAAGCCACCGCCCTCGGCCTCATCCATGATTTTATTTTGCCATTTCAAGTGATGGAGCTTGTTTTAGAGCTGGAAGAAAAGCCAAAATGCCAGTTAATCTAAACTAGATTCCTGCCCCAGTGCAGAACCAATCAAGACAGAGTCCCTGTCTTTCCCGGACCACAGGATTTGTGTTGAAAAGGAGAGGAGTGGGAGAGGCAGAGTGGATGGAGAACAAGGAATCATTTTCTATATTTTTAAAGTTCTTCAGTTAAGAAAATCAGCAATTACAATAGCCTAATCTTACTAGACATGTCTTTTCTTCCCTAGTATGTAAGGTCAATTCTGTTCATTTGCATAGGAGATAATCATAGGAATCCCAAATTAATACACTCTTGTGCTGACTTACCAGATGGGACACTCTAAGATTTTCTGCATAGCATTAATGACATTTTGTACTTCTTCAACGCGAAGAGCAGATAAATCCATTTCTTTCTGTTCCAATGAACTTTAACACATTAGAAAAACATATATATATATCTTTTTAAAAGGTTTATAAAATGACAACTTCATTTTATCATTTTAAAATAAAGTAAATTTAAGATTTGGAAGGTTTTAGAATAATACAAACCAAAGAACTAATGACAACGTCCTTTATTTTTAAAGATTCTAGAAGTTGCTTTTTGTAATTAGACAACATAAATTCTGAATTTTTTCACATATTGCTGCCAACCCCTTGGGTCTTTTCCTTTCTCCAAGAAAGAGAAAGCTACAGAGGAGTGACTGACCGGGTAGGTGGTGGTAGCCTTAGCTTTCTCCAATGTTTCTGGTTGTTTTCTTTTTCTTGCATAAAACCAAAATCAACAACGACCAAACCAACACCAATCAAGGCCTCCCCGCCCCTAACCTTTCCCAGTGACCTGCTCTCATCTCTGGATCCTCCTCAAGCACATCCCTGCCGGCAGCATCTGTTACTACTGACGCTCCTCTACTTCCCTCTTGCGCTTTCTCAATGGCGCAAATGGATCCAGTTCTTAAGTTCTCCCTCCCACAAAATCCTGTCTCCTCCCCTTCCCAGACATATTCCTGGCACCTCTTCTTCCACAAGGTCCCATCCTCTCATACATACCAGCCGGTGTTTTTTGTTTTGTTTTGTTTTGTTTTGTTTTGAGACAGTCTCGCTCTGTCGCCCAGGCTGGAGTGCAATGGCGCGATCTCGGCTCACTGCAACCTCCGCCTCCCGGGTTCTAGCGATTCTCCTGCCTCAGCCTCCTGAGTAGCTGGAGCGGCACCACGCCCGGCTAATTTTTGTATTTTTAGTAGAGACGGAGTTTCACCACGTTGGTCAGGCTGGTCTGGAACTCCTGACCTCATGACCAGCCGACGTTTTTAAAGACATAGTGTCCCCCTCAAGGCATATTCCAGTTCCTATCACGAGGATTCCCCCACGGACACTCAGTGCCCCCTTCCTGATCCTCAGCGCTTCCCTCGCGACCTACAAACTGCCCCCCTCCCCAGGGTTCACAACGCCTTACGCCTCTCAGGTTCCGCCCCTACCCCCCGTCAAAGAATACCCATCTGTCAGCTTCGGAAATCCACTCTCCCACGCCAGTACCCCAGAGCATCACTTGGGCCCCCTGTCCCTTTCCCGGGACTCTACTACCTTTACCCAGAGCAGAGGGTGAAGGCCTCCTGAGCGCAGGGGCCCAGTTATCTGAGAAACCCCACAGCCTGTCCCCCGTCCAGGAAGTCTCAGCGAGCTCACGCCGCGCAGTCGCAGTTTTAATTTATCTGTAATTCCCGCGCTTTTCCGTTGCCACGGAAACCAAGGGGCTACCGCTAAGCAGCAGCCTCTCAGAATACGAAATCAAGGTACAATCAGAGGATGGGAGGGACAGAAAGAGCCAAGCGTCTCTCGGGGCTCTGGATTGGCCACCCAGTCTGCCCCCGGATGACGTAAAAGGAAAGAGACGGAAGAGGAAGAATTCTACCTGAGTTTGCCATAAAGTGCCTGCCCTCTAGCCTCTACTCTTCCAGTTGCGGCTTATTGCATCACAGTAATTGCTGTACGAAGGTCAGAATCGCTACCTATTGTCCAAAGCAGTCGTAAGAAGAGGTCCCAATCCCCCACTCTTTCCGCCCTAATGGAGGTCTCCAGTTTCGGTAAATATAAGTAATAAGGATTGTTGGGGGGGTGGAGGGAAATAATTATTTCCAGCATGCGTTGCGGAATGAAAGGTCTTCGCCACAGTGTTCCTTAGAAACTGTAGTCTTATGGAGAGGAACATCCAATACCAGAGCGGGCACAATTCTCACGGAAATCCAGTGGATAGATTGGAGACCTGTGCGCGCTTGTACTTGTCAACAGTTATGGACTGGAGTGTTATGTTTTCGTATTTTGAAAGCAGAAACTAGGCCTTAAAAAGATACGTACAACTCTTTAGGGAGACTACAATTCCCATCCAGCCCCAGGAGTCTGGGGCAAGTAGTCTTGTAAGGTCAGTGGCCTGCGGGGACGCAGTGAGCGCCGAATTTGCCTGGGGCAGGGGAAATGCGCTCTGGCCCATGTCTGCGCACTCGTAGTTCCACCCCTCAGCCCCAGTGTTTGTTATTTTTCGGGTTCAGCTTGCTTTTGCCCCGTCTCCGTCGACGCAATCGCCACCAGTCAATGGGGTGGTCGTTTTGAGGGACAAGTGGTAAGAGCCAATCTTCTTGGCGAAAACGCGGAGAAACGGGACTAGTTACTGTCTTTGTCCGCCATGTTAGATTCACCCCACAGAGATAGCGGCAGAGCTGGCAGCGGACGGTCTTTGCATTGCCGCCTCCCCAGGGGGCGGGAAGCTGGTAAGGAAGCAGCCTGGGTTAGCTAGGGGTGGGGTCACGTCACACTAAGAGGGTTTGGAGAAGTTCAAGGGAGGAATCCTGCAAAGAAGAGGGGCGACTTTTTCCGTGTCTCCGGACAGCTAATCGTTTTAGTGACAGGATGAGAGAGCCCTTCGTGTTCTGAGGGACCGAGTGGGCGAAAAGCGCCGGAGAGTTGGAGAGTCTGTGGTTCAGAATGCGAGGTGACAACGTGCTAGCAGCCCTCGCTCGCTCTCGGCGCCTCCTCGGCCTTGGCGTCCATTCTGGCCGTGCTGGAGGAGCCCTTCAGCCCGCCACTGCGCTGTGGGGGCCCCTCTCTGGGCTGGCCGAAGCCAGAGCCGGCTCCCTCTGCTTGCGGGGAAGTGTGGAGGGAGAGGCGGGTGTGGGAACTGGGGCTGCGCGCAGCGCTCGCCAGCCAGCGCGAGTTCCAGGTGGGCGCGGGCTCAGCGGGCCCCGCACCCCCGGCCCCGGGCAGTCAGGGGCCTAGCACCCGGGCCAGCAGCTGCAGAGGGTGCGCCGGGTCCCCCAGCACTGCCGGCCCGCCTGCACCCCGCTTGAATTCTCACCGGGCCCCAGCCGCCCTGCACAGGGCAAGGCTCAGGACCTGCAGCCCGCCATGCCCGAGCCCCCTCCCAACCCCTGTGAGCTCCAGCGTGGCCTGAGCCTCCCCGACGGGCACCGCCCCCTGCTCCTCAGCGCCCGGTCCCATCGACTGCCCAAGGGCTGAGAGGAGTGCAGGCGCCCGGCACAGCCCTGCGCAGGATCCACTAGGTGAAGCCAGCTGGGCTCCTGAGTCAGATGGGGACTTGGAAAACTTTTATGTCTAGCCTGAGGATTTTATATGCACCAGTCAGCACTCTGTGTCTAGCTTGGGGTTTGGGGATGCACCAATCAGCACTCTGTATCTAGCTAATCTGGTGGGCACTTGGAGAACTTCTGTGTCTAGCTAAAGGATTGTAAATGCACCAATCAGTGCTCTGTGTCTAGCTCAAGGTTTGCAAATGCACCAATCAGCACTCTGTGTCTAGCTAAAGGTTTGTAAACGCACCAATCAGTGCTCTGTGTCTAGCAAATGTAGTGGGGACTTGGAGAATTTTTATGTCTAGCTAGAGGATTGTAAATGCACCAATCAGCACTCTGTGTATATCTAGCTCAGGGATTGTAAATGCACCAATCAGCACCCTGTCAAAACGGACCAATTAGCTCTCTGTAAAATGGACCAATCAACAGGATGTGGGTGGGGTCAGATAAGGGAATAAAAGCAGGCTGCCCCGCTGGGTGCCAGTGGCTCACACCTGTAATCCCAGCAATTTGGGAGGCCTAGAGGGGTGGATCACGAGGTCAAGAGATCGAGACCATCCTGGCTAACACAGTGAAACCCCGACTCTACTAAAAAGACAAAATATTAGCTGGGTGCGGTGGTGGGTGCCTGTAATCCCCTCTACTGGGGAGGTTGAGGCAGGAGAATGGCGTGAACCCGGGAGGCGGAGCTTGCAGTGAGCCCAGATTGCACCACTGCATTCCAGCCTGGGTGACAGAGGGAGACTCCATCTCAAAAAAAAAAAAAAAAAAAAAAAAAAATGCAGGCTGCCTGAGCCAGCAGCAGCAACCCGCTCTGGTCTCCTTCCACGCTGTGGAAGCTTTGTTCTTGTGCTCTTTGCAATAAATCTTGCTGCTGCTCACTCTTTGGGTCCGCATAGCATTTATCTGCTGGTAACACCGACCGCAGAGGTCTGCAGCTTCA"
-    var_prompt = "TTAAACACTTTTCAAACCAGGCAATATTTTAGGCCTACTGTATATTTGCATTTTGAGCTTCCAATACGGATAAGTGACTGGAAAAAGCAGCTAGGTTTAGGTTGAAAAACAACAACCCACCGGGGAACACATTTTAGCAAATTCTTCTGAAAGTCAAAAATGTTATAGTCATAGGTAAAAAGTTACAAAGAACTACCAATTGTCAGAAATAGCTGCCAATATTGACTTAGAAGACAGCAGAAGGAATTTTAGTTCAAGAAACCTAAAACAGGCTGAAAACCTTACCTACCCTATAGCTACCACAAATAACACTGTTTCCAGTCATGATCATTCCTGATCACATATTAAGACATAACTGCAAATTGTGCTATACTGTACTATATTAAAAGGAAGTGAAATATGATCCCTATCCTAGAACTTTCCATACAAATGAATGTAAAACACCATAAAAATTAATCTTAAGGCCGGGCGCGGTGGCTCACGCCTGTAATCCCAGCACTTTGGGAGGCCGAGGTGGGCGGATCACGAGGTCAGGAAGTGGAGACCATCCTGGCTAACACGGTGAAACCCCGTCTCTACTAAAAATACAAAAAATTAGCCGGGCGTGGTGGTGGACGCCTGTAGTCCCAGCTACTTGGGGGGCCGAGGCAGGAGAATGGCGTGAACCCGGGAGGCGGAGCTTGCAGTGAGCCGAGATGGCGCCACTGCACTCCGGCCTGGGTGAAAGAGCGAGACTCCGTCTCAAAAACAAAACAAACAAAAATTAATCTTAAGCCAGGCGCAGTGGCTCACGCCAGCACTTTGGAAGGCCGAGGCGGGTGGATCACGAGATCAGGACTTCAAGACCAGCCTGACCAACGTGATGAAACCCTATCTCTACTAAAAATACAAAATTAGCCGGCCACGGTGGCGTGCGCCTATAATCCCAGCTACTCAGGAGGCTGAGGCAGGAGAAGCGCTTGAACTTGAACCTGGCAGGCGGAGGTTGCAGTGAGCCAAGATGGCGCCACTGCACTCCAGCCTGGGCGACAGAGCCAGACTCCAACCCCCCACCCCGAAAAAAAAAGGTCCAGGCCGGGCGCAGTGGCTCAGGACTGTAATCCCAGCACTTTGGAAGGCTGAGGCGGGTGGATCACAAGGTCAGGAGATCGAGACCATCTTGGCTAACATGGTGAAACCCCGTCTCTACTAAAAATACAAAAAATTAGCCGGGCATAGTGGTGGGCGCCTGTAGTCCCAGCTACTCGGGAGGCTGAGGCAGGAGAATGGCCTGAACCCGGGAGGCGGAGCTGGCAGTGAGCCAAGATCGTGCCACTGCACTCCAGCCTAGGCAGCAGAGCGAGACCGTGTCTCAAAAAAACAAAACAAAACAAAACAAAAAGTCTGGGAGCGGTGGCTCACGCCTGTAATCCCAGCACTTTCGGAGGCCAAGGCAGGAGGATCACCTGAGGTCAGGAGTTCGAGACCAACCTGACCAATATGGAGAAACCCTGTCTCTACTAAAAATACAAAATTAGCTGGTGTGATGGCACATGCCTGCAATCCCAGGTACTCCGGAGGCTGAGGCAGCAGAATTGCTTGAACCCGGGAGGTGGAGGTTGTAGTGAGCCGAGATTGTGCCACTGCACTCCAGCCTGGGCAACAAGAGCCAAAGTCTGTCTCAAAAAAAAAAAAAAAAAAAAAAAAAGAAATTAATCTTAACAGGAAACAGAAAAAAGCAATGAAAAGCTAGAAAACATAATAGTTGATTGAAAATAACAATTTAGCATTTTCATTCTTACATCTTTAATTTTTATGTATCTGAGTTTTTAATTGATGGTTTAATTTGCCAGAATGAGAAAGAACATCCTATTTTTATGACTCTCTCCCATGGAAATGAAACATAAATGTATCCAAATGCCACACTATTGAGGATTTTCCTGATCACTGATTGTCATGAGTAAGTTTTGTGCTTTTTCAAAAGCAGTTTTTTCCTACAATGTCATTTCCTGCTTCTCTGGCTCTGATTTTCAATAAATTGATAAATTGTGAATCCTGTTTTCCTCTTATTTTTGTTTAGCTATAATGTTGAAGGGCAAGGGAGAGGATGGTTATTTATAAATCTTGTATCGCTCTGAAAACACAACATACATTTTCCTTAATCTGATTAACTTGACTTCAAATATGAAAAACAACTTTCATAAAGCAGAAAAGAATTTACCCTTTTTTATTGTGGGTAAGAGGCAATGGTACAACTTTTCAACTTATTTTTTGAATGTTACTCACTACTAACCATCACCATATTTAAAAAAATTAAAGAACTAATTTAGTTTAGTTTATTATTTATTTGACAAATGTTTATTGAGTGGCAACTAGGTCCCAAGTACCGTTCTAACTACTGAACATACAGATGTATGTAAACAAAACAAAAATCCCATCCTGGAGTTTACATTCTGTGGGACTAGAGATAAAAAATGGATACATTACATAGAATGTCAGCTAGTAATCAGTGTTATGGAGAAGCAGCAGGAATAGAAGATAAAGTGTGTGCTGGGGGTGTGGTAATTTTAAATAGGGGTGTCTGGAAATGAAAAGGTGGTATTTCAATCAAGATTTTTAGACCATGGCTGGGTGCAATGGCTCAGGCCTGTAATCCCAGCACCTTGAGAGGCCAAGGGAGGGTAGATCACTTGAGGTCAGGAGTTTGAGACCAGCATGGCCAACATAGCAAAACCCTATCTCTACAACAGAAAAATACAAGAATGGCTGGACGCAGTGGCTTATGCCTGTAATCCTAGCACTTTGGGAGGCCCAGGCGGGTGGATCACAAGGTCAGGAGATCAAGACTATCCTGGCTAACACGGTGAAATCCCGCCTCTACTAAAAAAGAAAAAAAAATACAAAAAATTAGCCGGGCGTGGTAGTGGGTGCTTGTAGTCCCAGCTATTCAGGAGGCTCAGGCAGAAGAATGGCATGAACCCGGGAGGCAGAGTTTGCAGTGAGCTGAGATCGCGCCACTGCACTCCAGCCTGGGCAACAGAGCAAGACTCCATCTCAAAAAAAGAAAAAAAAATACAAAAATTAGCTGGGCATGGTGGTGCACACCTATCGTCCCTGCTACTCTGGAGGCTGAGGTGGGAGGATTGCTTGAGCCTGACGAGGTTGAGGCTGCAGTGAGCTGTGATAGCACCACTGCACTCCAGCCTCTCGACAGAGATCCTATATAAAAAAAAAACCTCTGCATTTCATTGTATGTAAATAAGTATGTAATTTCATTGTATGTACAGAGCCAGTTTCAAACAAAGGTTCTTCCAAATACCTATCCTCTCAACGACACCGATCATCCATGTTTTTTTTTTTTTTTTTTTTTTTTTGAGATGGAGTTTAGCTCTGTCGCTGGAGTTCAGTGGTGCCATATTGGCTCACAGCAACATCTGCCTCCTGGTTCAAGTGATTCTCCTGCCTCAGCCTCCTGAGTAGCTGGGATTACAGGCACATGCCACTACGCCCAGCTAATTTTTGTATTTTTAGTGGAGAGGGGGTTTCACCATGTTGGCCAGGATGGTCTCGATCTCCTGACCTCGTGATCCTACCACCTTGGCCTCCCAAAGTGCTGGGATTACAGGCATAAGCCACCGCCCTCGGCCTCATCCATGATTTTATTTTGCCATTTCAAGTGATGGAGCTTGTTTTAGAGCTGGAAGAAAAGCCAAAATGCCAGTTAATCTAAACTAGATTCCTGCCCCAGTGCAGAACCAATCAAGACAGAGTCCCTGTCTTTCCCGGACCACAGGATTTGTGTTGAAAAGGAGAGGAGTGGGAGAGGCAGAGTGGATGGAGAACAAGGAATCATTTTCTATATTTTTAAAGTTCTTCAGTTAAGAAAATCAGCAATTACAATAGCCTAATCTTACTAGACATGTCTTTTCTTCCCTAGTATGTAAGGTCAATTCTGTTCATTTGCATAGGAGATAATCATAGGAATCCCAAATTAATACACTCTTGTGCTGACTTACCAGATGGGACACTCTAAGATTTTCTGCATAGCATTAATGACATTTTGTACTTCTTCAACGCGAAGAGCAGATAAATCCATTTCTTTCTGTTCCAATGAACTGTAACACATTAGAAAAACATATATATATATCTTTTTAAAAGGTTTATAAAATGACAACTTCATTTTATCATTTTAAAATAAAGTAAATTTAAGATTTGGAAGGTTTTAGAATAATACAAACCAAAGAACTAATGACAACGTCCTTTATTTTTAAAGATTCTAGAAGTTGCTTTTTGTAATTAGACAACATAAATTCTGAATTTTTTCACATATTGCTGCCAACCCCTTGGGTCTTTTCCTTTCTCCAAGAAAGAGAAAGCTACAGAGGAGTGACTGACCGGGTAGGTGGTGGTAGCCTTAGCTTTCTCCAATGTTTCTGGTTGTTTTCTTTTTCTTGCATAAAACCAAAATCAACAACGACCAAACCAACACCAATCAAGGCCTCCCCGCCCCTAACCTTTCCCAGTGACCTGCTCTCATCTCTGGATCCTCCTCAAGCACATCCCTGCCGGCAGCATCTGTTACTACTGACGCTCCTCTACTTCCCTCTTGCGCTTTCTCAATGGCGCAAATGGATCCAGTTCTTAAGTTCTCCCTCCCACAAAATCCTGTCTCCTCCCCTTCCCAGACATATTCCTGGCACCTCTTCTTCCACAAGGTCCCATCCTCTCATACATACCAGCCGGTGTTTTTTGTTTTGTTTTGTTTTGTTTTGTTTTGAGACAGTCTCGCTCTGTCGCCCAGGCTGGAGTGCAATGGCGCGATCTCGGCTCACTGCAACCTCCGCCTCCCGGGTTCTAGCGATTCTCCTGCCTCAGCCTCCTGAGTAGCTGGAGCGGCACCACGCCCGGCTAATTTTTGTATTTTTAGTAGAGACGGAGTTTCACCACGTTGGTCAGGCTGGTCTGGAACTCCTGACCTCATGACCAGCCGACGTTTTTAAAGACATAGTGTCCCCCTCAAGGCATATTCCAGTTCCTATCACGAGGATTCCCCCACGGACACTCAGTGCCCCCTTCCTGATCCTCAGCGCTTCCCTCGCGACCTACAAACTGCCCCCCTCCCCAGGGTTCACAACGCCTTACGCCTCTCAGGTTCCGCCCCTACCCCCCGTCAAAGAATACCCATCTGTCAGCTTCGGAAATCCACTCTCCCACGCCAGTACCCCAGAGCATCACTTGGGCCCCCTGTCCCTTTCCCGGGACTCTACTACCTTTACCCAGAGCAGAGGGTGAAGGCCTCCTGAGCGCAGGGGCCCAGTTATCTGAGAAACCCCACAGCCTGTCCCCCGTCCAGGAAGTCTCAGCGAGCTCACGCCGCGCAGTCGCAGTTTTAATTTATCTGTAATTCCCGCGCTTTTCCGTTGCCACGGAAACCAAGGGGCTACCGCTAAGCAGCAGCCTCTCAGAATACGAAATCAAGGTACAATCAGAGGATGGGAGGGACAGAAAGAGCCAAGCGTCTCTCGGGGCTCTGGATTGGCCACCCAGTCTGCCCCCGGATGACGTAAAAGGAAAGAGACGGAAGAGGAAGAATTCTACCTGAGTTTGCCATAAAGTGCCTGCCCTCTAGCCTCTACTCTTCCAGTTGCGGCTTATTGCATCACAGTAATTGCTGTACGAAGGTCAGAATCGCTACCTATTGTCCAAAGCAGTCGTAAGAAGAGGTCCCAATCCCCCACTCTTTCCGCCCTAATGGAGGTCTCCAGTTTCGGTAAATATAAGTAATAAGGATTGTTGGGGGGGTGGAGGGAAATAATTATTTCCAGCATGCGTTGCGGAATGAAAGGTCTTCGCCACAGTGTTCCTTAGAAACTGTAGTCTTATGGAGAGGAACATCCAATACCAGAGCGGGCACAATTCTCACGGAAATCCAGTGGATAGATTGGAGACCTGTGCGCGCTTGTACTTGTCAACAGTTATGGACTGGAGTGTTATGTTTTCGTATTTTGAAAGCAGAAACTAGGCCTTAAAAAGATACGTACAACTCTTTAGGGAGACTACAATTCCCATCCAGCCCCAGGAGTCTGGGGCAAGTAGTCTTGTAAGGTCAGTGGCCTGCGGGGACGCAGTGAGCGCCGAATTTGCCTGGGGCAGGGGAAATGCGCTCTGGCCCATGTCTGCGCACTCGTAGTTCCACCCCTCAGCCCCAGTGTTTGTTATTTTTCGGGTTCAGCTTGCTTTTGCCCCGTCTCCGTCGACGCAATCGCCACCAGTCAATGGGGTGGTCGTTTTGAGGGACAAGTGGTAAGAGCCAATCTTCTTGGCGAAAACGCGGAGAAACGGGACTAGTTACTGTCTTTGTCCGCCATGTTAGATTCACCCCACAGAGATAGCGGCAGAGCTGGCAGCGGACGGTCTTTGCATTGCCGCCTCCCCAGGGGGCGGGAAGCTGGTAAGGAAGCAGCCTGGGTTAGCTAGGGGTGGGGTCACGTCACACTAAGAGGGTTTGGAGAAGTTCAAGGGAGGAATCCTGCAAAGAAGAGGGGCGACTTTTTCCGTGTCTCCGGACAGCTAATCGTTTTAGTGACAGGATGAGAGAGCCCTTCGTGTTCTGAGGGACCGAGTGGGCGAAAAGCGCCGGAGAGTTGGAGAGTCTGTGGTTCAGAATGCGAGGTGACAACGTGCTAGCAGCCCTCGCTCGCTCTCGGCGCCTCCTCGGCCTTGGCGTCCATTCTGGCCGTGCTGGAGGAGCCCTTCAGCCCGCCACTGCGCTGTGGGGGCCCCTCTCTGGGCTGGCCGAAGCCAGAGCCGGCTCCCTCTGCTTGCGGGGAAGTGTGGAGGGAGAGGCGGGTGTGGGAACTGGGGCTGCGCGCAGCGCTCGCCAGCCAGCGCGAGTTCCAGGTGGGCGCGGGCTCAGCGGGCCCCGCACCCCCGGCCCCGGGCAGTCAGGGGCCTAGCACCCGGGCCAGCAGCTGCAGAGGGTGCGCCGGGTCCCCCAGCACTGCCGGCCCGCCTGCACCCCGCTTGAATTCTCACCGGGCCCCAGCCGCCCTGCACAGGGCAAGGCTCAGGACCTGCAGCCCGCCATGCCCGAGCCCCCTCCCAACCCCTGTGAGCTCCAGCGTGGCCTGAGCCTCCCCGACGGGCACCGCCCCCTGCTCCTCAGCGCCCGGTCCCATCGACTGCCCAAGGGCTGAGAGGAGTGCAGGCGCCCGGCACAGCCCTGCGCAGGATCCACTAGGTGAAGCCAGCTGGGCTCCTGAGTCAGATGGGGACTTGGAAAACTTTTATGTCTAGCCTGAGGATTTTATATGCACCAGTCAGCACTCTGTGTCTAGCTTGGGGTTTGGGGATGCACCAATCAGCACTCTGTATCTAGCTAATCTGGTGGGCACTTGGAGAACTTCTGTGTCTAGCTAAAGGATTGTAAATGCACCAATCAGTGCTCTGTGTCTAGCTCAAGGTTTGCAAATGCACCAATCAGCACTCTGTGTCTAGCTAAAGGTTTGTAAACGCACCAATCAGTGCTCTGTGTCTAGCAAATGTAGTGGGGACTTGGAGAATTTTTATGTCTAGCTAGAGGATTGTAAATGCACCAATCAGCACTCTGTGTATATCTAGCTCAGGGATTGTAAATGCACCAATCAGCACCCTGTCAAAACGGACCAATTAGCTCTCTGTAAAATGGACCAATCAACAGGATGTGGGTGGGGTCAGATAAGGGAATAAAAGCAGGCTGCCCCGCTGGGTGCCAGTGGCTCACACCTGTAATCCCAGCAATTTGGGAGGCCTAGAGGGGTGGATCACGAGGTCAAGAGATCGAGACCATCCTGGCTAACACAGTGAAACCCCGACTCTACTAAAAAGACAAAATATTAGCTGGGTGCGGTGGTGGGTGCCTGTAATCCCCTCTACTGGGGAGGTTGAGGCAGGAGAATGGCGTGAACCCGGGAGGCGGAGCTTGCAGTGAGCCCAGATTGCACCACTGCATTCCAGCCTGGGTGACAGAGGGAGACTCCATCTCAAAAAAAAAAAAAAAAAAAAAAAAAAATGCAGGCTGCCTGAGCCAGCAGCAGCAACCCGCTCTGGTCTCCTTCCACGCTGTGGAAGCTTTGTTCTTGTGCTCTTTGCAATAAATCTTGCTGCTGCTCACTCTTTGGGTCCGCATAGCATTTATCTGCTGGTAACACCGACCGCAGAGGTCTGCAGCTTCA"  # G inserted at position 4
-    
-    print("Running inference...")
-    
-    # Test log probability computation
-    log_probs = model.infer_sequence_log_prob([ref_prompt, var_prompt], collapse = "none")
-    print(f"Mean log probabilities: {log_probs}")
-    
-    # Test per-token log probs
-    per_token_log_probs = model._compute_sequence_log_probs([ref_prompt], collapse="none")
-    print(f"Per-token log probs for ref: {per_token_log_probs[0]}")
-    
-    # Test delta log-likelihood
-    delta = model.compute_delta_log_likelihood([ref_prompt], [var_prompt])
-    print(f"Delta log-likelihood (var - ref): {delta}")
-    
-    # Cleanup
-    model.cleanup()
+    def train(self, mode: bool = True):
+        """Keep the Evo2 backbone frozen/eval even during projection training."""
+        self._freeze_backbone()
+        return self
+
+    def to(self, device: str):
+        """Move the model to a CUDA device."""
+        self.device = torch.device(device)
+        if self.device.type != "cuda":
+            raise ValueError("Evo2BioNeMoModel requires a CUDA device.")
+        self.model.to(self.device)
+        return self
+
+    def parameters(self):
+        """Return model parameters for the fine-tuner."""
+        return self.model.parameters()
+
+    def named_parameters(self, prefix: str = "", recurse: bool = True):
+        """Return named model parameters."""
+        return self.model.named_parameters(prefix=prefix, recurse=recurse)
+
+    def get_hidden_dim(self):
+        """Return the hidden dimension of the model."""
+        return self.hidden_dim
+
+    def get_tokenizer(self):
+        """Return the tokenizer."""
+        return self.tokenizer
+
+    def load_checkpoint(self, checkpoint_path: str):
+        """Load Evo2 weights from a NeMo2 checkpoint directory/resource or a torch state dict."""
+        ckpt_root = Path(checkpoint_path)
+        if ckpt_root.is_file():
+            state = torch.load(ckpt_root, map_location=self.device)
+            state = state.get("model_state_dict", state)
+            self.model.load_state_dict(state, strict=False)
+            self._freeze_backbone()
+            logger.info("Loaded torch checkpoint: %s", checkpoint_path)
+            return self
+
+        if not ckpt_root.is_dir():
+            from bionemo.core.data.load import load
+            ckpt_root = load(checkpoint_path)
+
+        weights_root = ckpt_root / "weights" if (ckpt_root / "weights").is_dir() else ckpt_root
+        sd = self.model.sharded_state_dict(prefix="module.")
+        loaded = dist_ckpt_load(
+            sd, str(weights_root),
+            sharded_strategy=TorchDistLoadShardedStrategy(),
+        )
+        if isinstance(loaded, tuple):
+            loaded = loaded[0]
+        self.model.load_state_dict(loaded, strict=False)
+        self._freeze_backbone()
+        logger.info("Loaded Evo2 checkpoint: %s", checkpoint_path)
+        return self
