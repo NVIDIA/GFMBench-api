@@ -1,17 +1,16 @@
 # --- core runtime ---
 numpy==1.26.4
-pandas==3.0.3
+pandas>=1.3.3
 torch>=2.0.0,<3
 tqdm==4.67.3
 
 # --- data I/O (HuggingFace + reference genomes + parquet caches) ---
-datasets==4.8.5
+datasets>=2.0.0
 huggingface_hub==0.36.2
 pyfaidx==0.9.0.4
-pyarrow==24.0.0
+pyarrow>=6.0.0
 openpyxl==3.1.5
 
 # --- metrics / sequence processing ---
 biopython==1.87
 scikit-learn==1.7.2
-scipy==1.17.1
