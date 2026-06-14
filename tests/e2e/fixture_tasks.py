@@ -99,6 +99,9 @@ class FixtureZeroShotSNVTask(BaseGFMZeroShotSNVTask):
     def _get_default_max_seq_len(self) -> int:
         return 64
 
+    def use_reference_cache(self) -> bool:
+        return False
+
     def _get_variant_position_in_sequence(self) -> int:
         return self.SNV_POSITION
 
@@ -119,6 +122,9 @@ class FixtureZeroShotIndelTask(BaseGFMZeroShotGeneralIndelTask):
 
     def _get_default_max_seq_len(self) -> int:
         return 64
+
+    def use_reference_cache(self) -> bool:
+        return False
 
     def _create_test_dataset(self) -> list:
         data_dir = _variant_data_dir(self.root_data_dir_path)
