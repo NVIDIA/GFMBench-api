@@ -31,20 +31,20 @@ class GFMWithProjection(BaseGFMModel):
     """
     
     def __init__(self, base_model: BaseGFMModel, projection_layer: Optional[nn.Module] = None,
-                 disable_cache: bool = False) -> None:
+                 cache_size: Optional[float] = None) -> None:
         """
         Initialize the wrapped model.
         
         Args:
             base_model: BaseGFMModel instance
             projection_layer: nn.Module - projection layer (optional, for classification tasks)
-            disable_cache: if True, skip reference-sequence inference cache during VEP eval
+            cache_size: cache RAM limit in GB; None for unlimited, 0 disables caching
         """
         self.base_model: BaseGFMModel = base_model
         self.projection_layer: Optional[nn.Module] = projection_layer
         self.device: str = base_model.device
-        self.disable_cache = disable_cache
-        self._ref_cache = SequenceInferenceCache()
+        self.cache_size = cache_size
+        self._ref_cache = SequenceInferenceCache(max_size_gb=cache_size)
 
     def clear_ref_cache(self) -> None:
         """Clear cached reference-sequence inference (call after each benchmark task)."""
@@ -196,7 +196,7 @@ class GFMWithProjection(BaseGFMModel):
             self.base_model.infer_sequence_to_sequence,
             ref_sequences,
             conditional_input,
-            disable=self.disable_cache,
+            disable=self.cache_size == 0,
         )
         
         if var_repr_np is None or ref_repr_np is None:
