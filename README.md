@@ -105,7 +105,7 @@ GFMBench-API supports evaluation on **20 unique tasks**, grouped as:
 | LrbVariantEffectPathogenicOmimTask   | Zero-shot prediction of pathogenic variants associated with Mendelian diseases. |
 | LoleveCausalEqtlTask                 | Zero-shot prediction of causal expression-modulating variants (indels) in promoters. |
 
-Several zero-shot variant effect prediction tasks repeat the same reference sequence across variants. For tasks where that pattern is common, reference sequences are cached during evaluation to avoid redundant forward passes and improve efficiency. Caching is applied only where it offers a meaningful memory and latency tradeoff. To disable caching (e.g. due to memory limits), set `"disable_cache": True` in `task_config`.
+Several zero-shot variant effect prediction tasks repeat the same reference sequence across variants. For tasks where that pattern is common, reference sequences are cached during evaluation to avoid redundant forward passes and improve efficiency. Caching is applied only where it offers a meaningful memory and latency tradeoff. To disable caching, set `"cache_size": 0` in `task_config`. To cap RAM usage, set `"cache_size"` to a positive value in GB.
 
 ---
 
@@ -161,6 +161,7 @@ This reference script demonstrates a standard workflow:
 | `--linear_prob`      | flag    | False   | If set: train only projection layer               |
 | `--epochs`           | int     | 3       | Num epochs for fine-tuning                        |
 | `--disable_safe_model_call` | flag | False | Bypass try/except if set                          |
+| `--cache_size`       | float   | None    | Cache RAM limit in GB; None = no limit; 0 disables caching |
 
 #### Key Variables to Adjust in `run_benchmark.py`
 
@@ -174,7 +175,7 @@ This reference script demonstrates a standard workflow:
   sanity_check_mode = True  # Set to False for full eval
   ```
 - **Task configuration**  
-  Edit parameters like `max_sequence_length`, `batch_size`, or `disable_cache`.
+  Edit parameters like `max_sequence_length`, `batch_size`, or `cache_size`.
 - **Training parameters**  
   Change `num_epochs`, `learning_rate`, etc. in the training_params dict.
 - **Reproducibility:** Using `num_workers > 0` may cause non-deterministic results on several tasks; for full reproducibility in `usage_examples/run_benchmark.py`, keep the default `num_workers = 0`.
@@ -212,25 +213,34 @@ python usage_examples/run_benchmark.py \
     --csv_path results/linear_probe_results.csv
 ```
 
-Disable inference cache (e.g. memory limits):  
+Disable inference cache:  
 ```bash
 python usage_examples/run_benchmark.py \
     --model DNABERT2 \
-    --disable_cache \
+    --cache_size 0 \
     --report_algo_name no_cache \
     --csv_path results/no_cache_results.csv
 ```
 
+Cap inference cache RAM (200 GB):  
+```bash
+python usage_examples/run_benchmark.py \
+    --model DNABERT2 \
+    --cache_size 200 \
+    --report_algo_name capped_cache \
+    --csv_path results/capped_cache_results.csv
+```
+
 #### Inference caching
 
-Selected zero-shot variant effect prediction tasks cache repeated reference sequences during evaluation (see above). Set `"disable_cache": True` in `task_config` to turn this off.
+Selected zero-shot variant effect prediction tasks cache repeated reference sequences during evaluation (see above). Set `"cache_size": 0` in `task_config` to turn caching off, or a positive GB value to cap cache RAM.
 
 On top of that, `usage_examples/run_benchmark.py` uses the same caching utility (`gfmbench_api/utils/caching_utils.py`) in two other places:
 
 - **Linear probing (`--linear_prob`):** caches frozen backbone forwards when only the projection layer is trained.
 - **Supervised variant effect prediction:** caches reference sequences during evaluation.
 
-Caches are cleared after each task. Pass `--disable_cache` to disable all caching.
+When omitted, `--cache_size` is unlimited (a warning is logged at startup). When a cap is reached, existing entries are still served but new entries are not stored until the cache is cleared. Pass `--cache_size 0` to disable all caching.
 
 ---
 

@@ -14,6 +14,8 @@
 # limitations under the License.
 
 # This module does not embed third-party data download URLs.
+from typing import Optional
+
 import torch
 import torch.nn as nn
 from tqdm import tqdm
@@ -40,7 +42,7 @@ class GFMFinetuner:
         weight_decay=0.01,
         only_proj_layer=True,
         is_variant_effect_prediction=False,
-        disable_cache=False,
+        cache_size: Optional[float] = None,
         device='cpu'
     ):
         """
@@ -57,7 +59,7 @@ class GFMFinetuner:
             weight_decay: weight decay for regularization
             only_proj_layer: if True, only train projection layer; if False, train full model
             is_variant_effect_prediction: if True, task uses variant/ref sequence pairs
-            disable_cache: if True, skip frozen backbone forward cache during linear probing
+            cache_size: cache RAM limit in GB; None for unlimited, 0 disables caching
             device: torch device
         """
         self.model = model
@@ -70,7 +72,7 @@ class GFMFinetuner:
         self.weight_decay = weight_decay
         self.only_proj_layer = only_proj_layer
         self.is_variant_effect_prediction = is_variant_effect_prediction
-        self.disable_cache = disable_cache
+        self.cache_size = cache_size
         self.device = device
         
         # Create projection layer for classification
@@ -126,7 +128,7 @@ class GFMFinetuner:
             self.model.eval()  # Keep model in eval mode if only training projection
         self.projection.train()
 
-        fwd_cache = SequenceInferenceCache() if self.only_proj_layer else None
+        fwd_cache = SequenceInferenceCache(max_size_gb=self.cache_size) if self.only_proj_layer else None
 
         # Training loop
         for epoch in range(self.num_epochs):
@@ -147,12 +149,12 @@ class GFMFinetuner:
                             var_repr = fwd_cache.cached_call(
                                 self.model._sequence_to_representative,
                                 variant_sequences,
-                                disable=self.disable_cache,
+                                disable=self.cache_size == 0,
                             )
                             ref_repr = fwd_cache.cached_call(
                                 self.model._sequence_to_representative,
                                 ref_sequences,
-                                disable=self.disable_cache,
+                                disable=self.cache_size == 0,
                             )
                         # Detach to ensure no gradient flow to model
                         var_repr = var_repr.detach()
@@ -175,7 +177,7 @@ class GFMFinetuner:
                             sequence_repr = fwd_cache.cached_call(
                                 self.model._sequence_to_representative,
                                 sequences,
-                                disable=self.disable_cache,
+                                disable=self.cache_size == 0,
                             )
                         # Detach to ensure no gradient flow to model
                         sequence_repr = sequence_repr.detach()
@@ -208,7 +210,7 @@ class GFMFinetuner:
         
         # Return wrapped model with projection layer
         wrapped_model = GFMWithProjection(
-            self.model, self.projection, disable_cache=self.disable_cache
+            self.model, self.projection, cache_size=self.cache_size
         )
         wrapped_model.eval()  # Set to eval mode after training
         return wrapped_model

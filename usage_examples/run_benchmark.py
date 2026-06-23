@@ -184,10 +184,10 @@ def parse_args(argv=None):
     )
     
     parser.add_argument(
-        "--disable_cache",
-        action="store_true",
-        help="If set, disable inference cache (zero-shot ref cache, supervised VEP ref cache, "
-             "and linear-probing forward cache).",
+        "--cache_size",
+        type=float,
+        default=None,
+        help="Cache RAM limit in GB. 0 disables caching. None for unlimited.",
     )
     parser.add_argument(
         '--root_data_dir_path',
@@ -289,7 +289,7 @@ def main(argv=None):
 
 
     # Task configuration for DNABERT-2 (max 512 tokens by default, can extrapolate longer)
-    # Supported keys: max_sequence_length, batch_size, num_workers, max_num_samples, disable_safe_model_call, disable_cache
+    # Supported keys: max_sequence_length, batch_size, num_workers, max_num_samples, disable_safe_model_call, cache_size
     # Set to None for models with no sequence length limit (e.g., HyenaDNA)
     task_config = {
         "max_sequence_length": max_length,
@@ -297,10 +297,16 @@ def main(argv=None):
         "num_workers": 0,
         "max_num_samples": None,
         "disable_safe_model_call": args.disable_safe_model_call,
-        "disable_cache": args.disable_cache,
+        "cache_size": args.cache_size,
     }
 
-    logging.info(f"disable_cache={args.disable_cache}")
+    if args.cache_size is None:
+        logging.warning(
+            "cache_size not set; caches are unlimited (RAM). "
+            "Pass --cache_size N (GB) to cap cache RAM."
+        )
+    else:
+        logging.info(f"cache_size={args.cache_size} GB")
 
     if args.sanity_check_mode:
         task_config["max_num_samples"] = 100
@@ -386,7 +392,7 @@ def main(argv=None):
                 weight_decay=training_params["weight_decay"],
                 only_proj_layer=training_params["only_proj_layer"],
                 is_variant_effect_prediction=is_variant_effect,
-                disable_cache=args.disable_cache,
+                cache_size=args.cache_size,
                 device=device
             )
             
