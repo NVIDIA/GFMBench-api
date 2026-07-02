@@ -32,6 +32,46 @@ from huggingface_hub.utils import EntryNotFoundError, HfHubHTTPError
 # HuggingFace Dataset Utilities
 # =============================================================================
 
+# =============================================================================
+# HuggingFace Hub file download (single files via local_dir)
+# =============================================================================
+
+def ensure_hf_hub_file(
+    repo_id: str,
+    filename: str,
+    local_dir: str,
+    *,
+    repo_type: str = "dataset",
+) -> str:
+    """
+    Return the local path to a HuggingFace Hub file, downloading only if missing.
+
+    ``hf_hub_download(..., local_dir=...)`` stores files at ``local_dir/<filename>``
+    (repo-relative path). Also accepts a flat copy at ``local_dir/<basename>``.
+    """
+    os.makedirs(local_dir, exist_ok=True)
+    nested_path = os.path.join(local_dir, filename)
+    flat_path = os.path.join(local_dir, os.path.basename(filename))
+
+    if os.path.exists(nested_path):
+        return nested_path
+    if os.path.exists(flat_path):
+        return flat_path
+
+    logging.info(
+        "Downloading %s from %s into %s",
+        filename,
+        repo_id,
+        local_dir,
+    )
+    return hf_hub_download(
+        repo_id=repo_id,
+        filename=filename,
+        repo_type=repo_type,
+        local_dir=local_dir,
+    )
+
+
 def download_hf_dataset_files(
     repo_id: str,
     subfolder: str | list[str],
