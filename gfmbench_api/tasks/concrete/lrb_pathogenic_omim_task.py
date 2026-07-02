@@ -24,9 +24,8 @@ import numpy as np
 import pandas as pd
 from torch.utils.data import Dataset
 from pyfaidx import Fasta
-from huggingface_hub import hf_hub_download
 
-from gfmbench_api.utils.fileutils import ensure_reference_genome
+from gfmbench_api.utils.fileutils import ensure_hf_hub_file, ensure_reference_genome
 from gfmbench_api.utils.preprocutils import standardize_sequence, pad_sequence_centered_variant
 from gfmbench_api.tasks.base.base_gfm_zeroshot_snv_task import BaseGFMZeroShotSNVTask
 
@@ -147,25 +146,13 @@ class LrbVariantEffectPathogenicOmimTask(BaseGFMZeroShotSNVTask):
         
         # Ensure/Load Variants Data
         variants_path = cfg.get("variants_path")
-        
         if not variants_path:
-            expected_filename = "vep_pathogenic_non_coding_subset.csv"
-            flat_path = os.path.join(task_data_dir, expected_filename)
-            
-            if os.path.exists(flat_path):
-                variants_path = flat_path
-            else:
-                logging.info(f"[Task] Data not found. Downloading from InstaDeepAI/genomics-long-range-benchmark...")
-                try:
-                    downloaded_path = hf_hub_download(
-                        repo_id="InstaDeepAI/genomics-long-range-benchmark",
-                        filename="variant_effect_pathogenic/vep_pathogenic_non_coding_subset.csv",
-                        repo_type="dataset",
-                        local_dir=task_data_dir
-                    )
-                    variants_path = downloaded_path
-                except Exception as e:
-                    raise RuntimeError(f"Failed to download LRB data: {e}")
+            variants_path = ensure_hf_hub_file(
+                repo_id="InstaDeepAI/genomics-long-range-benchmark",
+                filename="variant_effect_pathogenic/vep_pathogenic_non_coding_subset.csv",
+                local_dir=task_data_dir,
+                repo_type="dataset",
+            )
         
         logging.info(f"[Task] Using Variants File: {variants_path}")
         df = pd.read_csv(variants_path)
