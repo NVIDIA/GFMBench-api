@@ -384,10 +384,14 @@ def extract_snv_sequences_from_genome(
     
     for idx, row in df.iterrows():
         chrom = str(row[chrom_col])
-        pos = int(row[pos_col])
-        ref_allele = str(row[ref_col]).upper()
-        alt_allele = str(row[alt_col]).upper()
-        label = int(row[label_col]) if row[label_col] in [0, 1] else (1 if row[label_col] else 0)
+        try:
+            pos = int(row[pos_col])
+            ref_allele = str(row[ref_col]).upper()
+            alt_allele = str(row[alt_col]).upper()
+            label = int(row[label_col]) if row[label_col] in [0, 1] else (1 if row[label_col] else 0)
+        except (ValueError, TypeError):
+            skipped += 1
+            continue
         
         # Extract reference sequence
         ref_seq = get_reference_sequence(genome, chrom, pos, flank_size)
@@ -519,10 +523,17 @@ def extract_snv_sequences_centered(
                 continue
         
         for _, row in group.iterrows():
-            pos = int(row[pos_col])  # 1-based VCF position
-            ref_allele = str(row[ref_col]).upper()
-            alt_allele = str(row[alt_col]).upper()
-            label = int(row[label_col]) if row[label_col] in [0, 1] else (1 if row[label_col] else 0)
+            try:
+                pos = int(row[pos_col])  # 1-based VCF position
+                ref_allele = str(row[ref_col]).upper()
+                alt_allele = str(row[alt_col]).upper()
+                label = int(row[label_col]) if row[label_col] in [0, 1] else (1 if row[label_col] else 0)
+            except (ValueError, TypeError) as e:
+                logging.debug(
+                    f"Skipping variant with invalid pos/label at {chrom_str}: {e}"
+                )
+                skipped += 1
+                continue
             
             # Validate SNV constraint (single nucleotide variants only)
             if len(ref_allele) != 1 or len(alt_allele) != 1:
