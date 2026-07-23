@@ -51,10 +51,16 @@ _ASSEMBLY_URLS = {
     "hg19": "https://hgdownload.soe.ucsc.edu/goldenPath/hg19/bigZips/hg19.fa.gz",
 }
 
-# Per-split target counts (from the upstream CAGE builder) needed to name the
-# final (partial) npz shard correctly.
+# CAGE constants mirroring the upstream genomics-long-range-benchmark builder
+# (InstaDeepAI/genomics-long-range-benchmark, cage_prediction). Keep in sync if
+# that dataset is re-released:
+#   * _CAGE_TOTALS: samples per split, used only to name the final (partial) npz
+#     shard `targets-{split}-{floored}-{end}.npz`. Re-derive as the per-split row
+#     count of `cage_prediction/sequences_coordinates.csv`.
+#   * _CAGE_DEFAULT_LENGTH / _CAGE_BIN: the full Basenji/Enformer window is
+#     896 bins x 128 bp = 114688 bp; shorter windows crop bins symmetrically.
 _CAGE_TOTALS = {"train": 33891, "valid": 2195, "test": 1922}
-_CAGE_DEFAULT_LENGTH = 114688  # 896 bins x 128bp
+_CAGE_DEFAULT_LENGTH = 114688  # 896 bins x 128 bp (full Basenji/Enformer window)
 _CAGE_BIN = 128
 
 _EMPTY_COND = np.array([], dtype=np.float32)
@@ -123,6 +129,43 @@ def builder_pad_sequence(chromosome, start, sequence_length, end=None, negative_
     return chromosome[start:end].seq
 
 
+def _rows_to_examples(
+    df,
+    split: str,
+    genome: Fasta,
+    seq_len: int,
+    n: Optional[int],
+    *,
+    start_col: str,
+    end_col: Optional[str],
+    label_fn,
+) -> List[Example]:
+    """Shared split->examples loop for the single-position supervised LRB tasks.
+
+    Selects the ``split`` rows (shuffling before any ``n`` truncation, since the
+    CSVs are grouped by label and a plain ``head()`` would yield a degenerate
+    single-class subset), pads each region to ``seq_len`` bp, and builds
+    ``(sequence, label, conditional_input)`` tuples. ``label_fn(row)`` extracts
+    the per-task label; ``end_col=None`` pads symmetrically around a single
+    position (chromatin 200bp bins) rather than around a ``[start, end)`` span
+    (regulatory elements).
+    """
+    sub = df[df["split"] == split]
+    if n is not None:
+        sub = sub.sample(frac=1.0, random_state=0).head(n)
+    examples: List[Example] = []
+    for _, row in sub.iterrows():
+        chrom = _get_chromosome(genome, row["CHROM"])
+        if chrom is None:
+            continue
+        end = int(row[end_col]) - 1 if end_col else None
+        seq = builder_pad_sequence(chrom, int(row[start_col]) - 1, seq_len, end=end)
+        if not seq:
+            continue
+        examples.append((standardize_sequence(seq), label_fn(row), _EMPTY_COND))
+    return examples
+
+
 # ---------------------------------------------------------------------------
 # Regulatory elements (enhancer / promoter): binary, single sequence, hg38.
 # ---------------------------------------------------------------------------
@@ -146,21 +189,11 @@ def build_regulatory_examples(
 
 
 def _regulatory_split(df, split, genome, seq_len, n) -> List[Example]:
-    sub = df[df["split"] == split]
-    if n is not None:
-        # Shuffle before truncating: the CSV is grouped by label, so a plain
-        # head() would yield a single-class subset (degenerate AUROC/AUPRC).
-        sub = sub.sample(frac=1.0, random_state=0).head(n)
-    examples: List[Example] = []
-    for _, row in sub.iterrows():
-        chrom = _get_chromosome(genome, row["CHROM"])
-        if chrom is None:
-            continue
-        seq = builder_pad_sequence(chrom, int(row["START"]) - 1, seq_len, end=int(row["STOP"]) - 1)
-        if not seq:
-            continue
-        examples.append((standardize_sequence(seq), int(row["label"]), _EMPTY_COND))
-    return examples
+    return _rows_to_examples(
+        df, split, genome, seq_len, n,
+        start_col="START", end_col="STOP",
+        label_fn=lambda row: int(row["label"]),
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -187,23 +220,12 @@ def build_chromatin_examples(
 
 
 def _chromatin_split(df, split, genome, seq_len, label_col, n) -> List[Example]:
-    sub = df[df["split"] == split]
-    if n is not None:
-        # Shuffle before truncating so the capped subset spans both classes
-        # across the per-track labels (the CSV is grouped).
-        sub = sub.sample(frac=1.0, random_state=0).head(n)
-    examples: List[Example] = []
-    for _, row in sub.iterrows():
-        chrom = _get_chromosome(genome, row["CHROM"])
-        if chrom is None:
-            continue
-        # Centered on the annotated 200bp bin (no explicit end -> symmetric pad).
-        seq = builder_pad_sequence(chrom, int(row["POS"]) - 1, seq_len)
-        if not seq:
-            continue
-        labels = np.asarray(literal_eval(row[label_col]), dtype=np.float32)
-        examples.append((standardize_sequence(seq), labels, _EMPTY_COND))
-    return examples
+    # Centered on the annotated 200bp bin (no explicit end -> symmetric pad).
+    return _rows_to_examples(
+        df, split, genome, seq_len, n,
+        start_col="POS", end_col=None,
+        label_fn=lambda row: np.asarray(literal_eval(row[label_col]), dtype=np.float32),
+    )
 
 
 # ---------------------------------------------------------------------------

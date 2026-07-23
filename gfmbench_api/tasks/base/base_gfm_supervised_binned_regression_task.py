@@ -22,7 +22,7 @@ from torch.utils.data import DataLoader, Dataset
 
 from tqdm import tqdm
 
-from gfmbench_api.metrics import BinnedRegressionMSE, BinnedRegressionPearsonR
+from gfmbench_api.metrics import BinnedRegressionPearsonR, BinnedRegressionR2
 from gfmbench_api.tasks.base.base_gfm_task import BaseGFMTask
 
 
@@ -38,8 +38,8 @@ class BaseGFMSupervisedBinnedRegressionTask(BaseGFMTask):
     * **Training** uses MSE over the binned predictions. ``get_task_attributes``
       advertises ``task_type='binned_regression'`` so the fine-tuner pools token
       embeddings into ``num_bins`` bins and trains a per-bin regression head.
-    * **Eval** reports macro Pearson r (per track, across all bins/samples) and
-      dataset-level MSE via ``infer_sequence_to_binned_tracks``.
+    * **Eval** reports macro Pearson r and macro R^2 (per track, across all
+      bins/samples) via ``infer_sequence_to_binned_tracks``.
 
     ``num_labels`` carries the number of output tracks so the shared fine-tuner
     can size the regression head as ``Linear(hidden_dim, num_tracks)``.
@@ -65,12 +65,12 @@ class BaseGFMSupervisedBinnedRegressionTask(BaseGFMTask):
         }
 
     def _eval_dataset(self, model: Any, dataset: Any) -> Dict[str, Optional[float]]:
-        """Evaluate binned predictions with macro Pearson r and MSE."""
+        """Evaluate binned predictions with macro Pearson r and macro R^2."""
         data_loader = DataLoader(
             dataset, batch_size=self.batch_size, shuffle=False, num_workers=self.num_workers
         )
 
-        metrics = [BinnedRegressionPearsonR(), BinnedRegressionMSE()]
+        metrics = [BinnedRegressionPearsonR(), BinnedRegressionR2()]
 
         for batch in tqdm(data_loader, desc="Evaluating"):
             sequences, labels, conditional_input = batch
