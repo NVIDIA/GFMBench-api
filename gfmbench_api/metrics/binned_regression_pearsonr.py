@@ -25,8 +25,6 @@ class BinnedRegressionPearsonR(BaseMetric):
     Receives predictions and targets of shape [batch, num_bins, num_tracks]
     (binned tracks, e.g. CAGE). All (sample, bin) pairs are pooled per track,
     Pearson r is computed for each track, and the mean over tracks is returned.
-    This matches the Basenji/Enformer convention of reporting correlation across
-    genomic positions per output track.
     """
 
     def reset(self):

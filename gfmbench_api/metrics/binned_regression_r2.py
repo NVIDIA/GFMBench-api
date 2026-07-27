@@ -25,9 +25,8 @@ class BinnedRegressionR2(BaseMetric):
     Receives predictions and targets of shape [batch, num_bins, num_tracks]
     (binned tracks, e.g. CAGE). All (sample, bin) pairs are pooled per track,
     R^2 = 1 - SS_res / SS_tot is computed for each track, and the mean over
-    tracks is returned. This is the coefficient of determination reported by the
-    Genomics Long-Range Benchmark for gene-expression tasks, and is distinct from
-    the (squared) Pearson correlation reported by ``BinnedRegressionPearsonR``.
+    tracks is returned. This is distinct from the (squared) Pearson correlation
+    reported by ``BinnedRegressionPearsonR``.
 
     Tracks whose targets are constant (``SS_tot == 0``) have an undefined R^2 and
     are skipped in the macro average.
