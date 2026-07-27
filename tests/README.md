@@ -12,19 +12,20 @@ pip install -e ".[test]"
 
 | File | What it checks | Network | GPU |
 |------|----------------|---------|-----|
-| `tests/unit/test_caching_utils.py` | `SequenceInferenceCache` semantics — cache hits/misses, dedup, disable, clear, output type fidelity, key correctness, variable-length padding | No | No |
+| `tests/unit/test_caching_utils.py` | `SequenceInferenceCache` semantics — cache hits/misses, dedup, disable, clear, size limits, output type fidelity, key correctness, variable-length padding | No | No |
 | `tests/e2e/test_smoke.py` | Full eval pipeline with `MockGFMModel` and local fixture CSVs | No | No |
 | `tests/e2e/test_download.py` | Tasks download data into an empty temp directory | Yes | No |
 | `tests/e2e/test_heavy.py` | Real DNABERT2 benchmark on all tasks (sanity mode); scores compared to pinned baseline CSV | Yes | Recommended |
 
 ### Unit (`tests/unit/test_caching_utils.py`)
 
-Ten tests for `SequenceInferenceCache`, grouped into four areas:
+Thirteen tests for `SequenceInferenceCache`, grouped into five areas:
 
 | Group | Tests |
 |-------|-------|
 | Core semantics | Full cache hit skips `fn`; partial hit calls `fn` for misses only; duplicate sequences deduplicated within a batch |
-| Disable and clear | `disable=True` bypasses read and write; `clear()` invalidates all entries |
+| Disable and clear | `disable=True` bypasses read and write; `clear()` invalidates all entries and resets byte accounting |
+| Size limits | `max_size_gb=0` disables caching; positive cap stops writes when full while preserving hits; partial batch stores only entries that fit |
 | Output type fidelity | Torch tensor round-trip preserves dtype and device; tuple output `(ndarray, ndarray, None)` has all slots restored |
 | Key and merge correctness | Different scalar extra args produce separate cache entries; variable-length 2-D embeddings are zero-padded on merge |
 

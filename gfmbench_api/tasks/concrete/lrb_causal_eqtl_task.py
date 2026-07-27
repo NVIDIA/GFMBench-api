@@ -26,12 +26,11 @@ import torch.optim as optim
 from torch.utils.data import Dataset, DataLoader, random_split
 from tqdm import tqdm
 from pyfaidx import Fasta
-from huggingface_hub import hf_hub_download
 from typing import Any, Tuple, Optional, Dict, List
 
 # Framework Imports
 from gfmbench_api.tasks.base.base_gfm_supervised_variant_effect_task import BaseGFMSupervisedVariantEffectTask
-from gfmbench_api.utils.fileutils import ensure_reference_genome
+from gfmbench_api.utils.fileutils import ensure_hf_hub_file, ensure_reference_genome
 from gfmbench_api.utils.preprocutils import standardize_sequence, pad_sequence_centered_variant
 
 
@@ -100,32 +99,12 @@ class LRBCausalEqtlTask(BaseGFMSupervisedVariantEffectTask):
         os.makedirs(task_data_dir, exist_ok=True)
         os.makedirs(genome_dir, exist_ok=True)
 
-        # 1. Download/Load Data (Matches framework style)
-        local_csv_path = None
-        expected_filename = "All_Tissues.csv"
-        
-        # Check local defaults first (flat structure)
-        flat_path = os.path.join(task_data_dir, expected_filename)
-        # Check nested structure (if downloaded previously by HF)
-        nested_path = os.path.join(task_data_dir, "variant_effect_causal_eqtl", expected_filename)
-
-        if os.path.exists(flat_path):
-            local_csv_path = flat_path
-        elif os.path.exists(nested_path):
-            local_csv_path = nested_path
-        else:
-            print(f"[Task] Data not found. Downloading from InstaDeepAI/genomics-long-range-benchmark...")
-            try:
-                # Use return value from hf_hub_download to get exact path
-                downloaded_path = hf_hub_download(
-                    repo_id="InstaDeepAI/genomics-long-range-benchmark",
-                    filename="variant_effect_causal_eqtl/All_Tissues.csv", 
-                    repo_type="dataset",
-                    local_dir=task_data_dir
-                )
-                local_csv_path = downloaded_path
-            except Exception as e:
-                raise RuntimeError(f"Failed to download LRB Causal eQTL data: {e}")
+        local_csv_path = ensure_hf_hub_file(
+            repo_id="InstaDeepAI/genomics-long-range-benchmark",
+            filename="variant_effect_causal_eqtl/All_Tissues.csv",
+            local_dir=task_data_dir,
+            repo_type="dataset",
+        )
 
         print(f"[Task] Loading: {local_csv_path}")
         df = pd.read_csv(local_csv_path)

@@ -119,7 +119,7 @@ class BaseGFMZeroShotTask(BaseGFMTask):
         # Get additional metrics from subclass
         additional_metrics = self._get_additional_metrics()
 
-        ref_cache = SequenceInferenceCache()
+        ref_cache = SequenceInferenceCache(max_size_gb=self.cache_size)
         for batch_data in tqdm(data_loader, desc="Evaluating (Zero-Shot)"):
             variant_sequences, reference_sequences, labels, conditional_input = batch_data
 
@@ -135,7 +135,7 @@ class BaseGFMZeroShotTask(BaseGFMTask):
                 infer_ref,
                 reference_sequences,
                 conditional_input,
-                disable=self.disable_cache or not self.use_reference_cache(),
+                disable=(self.cache_size == 0) or not self.use_reference_cache(),
             )
 
             # Build outputs dict for metric argument lookup

@@ -15,6 +15,7 @@
 
 from typing import Any, Callable, Hashable, List, Optional, Sequence, Tuple
 
+import logging
 import numpy as np
 import torch
 
@@ -39,16 +40,47 @@ class SequenceInferenceCache:
     Cached values are always stored on CPU (as numpy arrays). On return, outputs are
     restored to the same type/device as the wrapped function would produce (e.g. GPU
     tensors for training forwards, numpy for inference APIs).
+
+  Optional ``max_size_gb`` caps total cached value bytes. When the cap is reached,
+  cache hits are still served but new entries are not stored until ``clear()``.
+  ``max_size_gb=0`` disables caching entirely (no reads or writes).
     """
 
-    def __init__(self) -> None:
+    def __init__(self, max_size_gb: Optional[float] = None) -> None:
         self._cache: dict = {}
         self._output_specs: Optional[Tuple[OutputSpec, ...]] = None
+        self._current_size_bytes: int = 0
+        if max_size_gb is None:
+            self._max_size_bytes: Optional[int] = None
+        elif max_size_gb == 0:
+            self._max_size_bytes = 0
+        else:
+            self._max_size_bytes = int(max_size_gb * 1024**3)
+        self._full_warning_logged = False
+
+    @property
+    def current_size_bytes(self) -> int:
+        """Total nbytes of cached value arrays currently stored."""
+        return self._current_size_bytes
+
+    @property
+    def max_size_bytes(self) -> Optional[int]:
+        """Configured byte cap, or None when unlimited."""
+        return self._max_size_bytes
+
+    @property
+    def is_full(self) -> bool:
+        """True when a positive byte cap is set and no further entries can fit."""
+        if self._max_size_bytes is None or self._max_size_bytes == 0:
+            return False
+        return self._current_size_bytes >= self._max_size_bytes
 
     def clear(self) -> None:
         """Remove all cached entries."""
         self._cache.clear()
         self._output_specs = None
+        self._current_size_bytes = 0
+        self._full_warning_logged = False
 
     def cached_call(self, fn: Callable[..., Any], *args: Any, disable: bool = False) -> Any:
         """
@@ -62,7 +94,7 @@ class SequenceInferenceCache:
         Returns:
             Same value structure as ``fn`` would return for the full batch.
         """
-        if disable:
+        if disable or self._max_size_bytes == 0:
             if not args:
                 return fn(*args)
             sequences = args[0]
@@ -113,7 +145,15 @@ class SequenceInferenceCache:
                 self._to_cache_value(self._slice_row(out, uk_idx) if out is not None else None)
                 for out in fresh_outputs
             )
-            self._cache[key] = row_outputs
+            entry_size = self._entry_size_bytes(row_outputs)
+            if self._can_store(entry_size):
+                was_not_full = not self.is_full
+                self._cache[key] = row_outputs
+                self._current_size_bytes += entry_size
+                if was_not_full and self.is_full:
+                    self._warn_cache_full_once()
+            elif self.is_full:
+                self._warn_cache_full_once()
             for i in miss_key_to_indices[key]:
                 per_index_rows[i] = row_outputs
 
@@ -121,6 +161,37 @@ class SequenceInferenceCache:
             return fresh_result
 
         return self._assemble_and_restore(per_index_rows)
+
+    @staticmethod
+    def _entry_size_bytes(row: Tuple[Any, ...]) -> int:
+        """Sum nbytes of numpy arrays in a cached row."""
+        total = 0
+        for value in row:
+            if isinstance(value, np.ndarray):
+                total += value.nbytes
+        return total
+
+    def _can_store(self, entry_size: int) -> bool:
+        """Return True if a row of ``entry_size`` bytes may be written to the cache."""
+        if self._max_size_bytes is None:
+            return True
+        if self._max_size_bytes == 0:
+            return False
+        return self._current_size_bytes + entry_size <= self._max_size_bytes
+
+    def _warn_cache_full_once(self) -> None:
+        """Log a one-time warning when the cache has reached its byte cap."""
+        if self._full_warning_logged:
+            return
+        if self._max_size_bytes is None or self._max_size_bytes == 0:
+            return
+        self._full_warning_logged = True
+        max_gb = self._max_size_bytes / (1024**3)
+        logging.warning(
+            "SequenceInferenceCache is full (%.4g GB). "
+            "Further cache misses will not be stored until clear().",
+            max_gb,
+        )
 
     def _assemble_and_restore(self, per_index_rows: List[Optional[Tuple[Any, ...]]]) -> Any:
         merged = self._assemble_batch_output(per_index_rows)

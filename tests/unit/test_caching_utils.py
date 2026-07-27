@@ -116,10 +116,51 @@ def test_clear_invalidates_entries():
     cache = SequenceInferenceCache()
 
     cache.cached_call(fn, ["seq_A"])  # populate
+    assert cache.current_size_bytes > 0
     cache.clear()
+    assert cache.current_size_bytes == 0
     cache.cached_call(fn, ["seq_A"])  # must be a miss again
 
     assert fn.call_count == 2
+
+
+def test_cache_size_zero_disables_caching():
+    """max_size_gb=0 must bypass both read and write; cache stays empty."""
+    fn = _make_fn({"seq_A": np.array([1.0, 2.0])})
+    cache = SequenceInferenceCache(max_size_gb=0)
+
+    cache.cached_call(fn, ["seq_A"])
+    cache.cached_call(fn, ["seq_A"])
+    cache.cached_call(fn, ["seq_A"], disable=False)
+
+    assert fn.call_count == 3
+    assert cache.current_size_bytes == 0
+    assert len(cache._cache) == 0
+
+
+def test_cache_size_limit_stops_writes_but_keeps_hits():
+    """When full, misses are computed but not stored; prior entries remain readable."""
+    output_a = np.ones(512, dtype=np.float64)
+    output_b = np.ones(512, dtype=np.float64) * 2
+    fn = _make_fn({"seq_A": output_a, "seq_B": output_b})
+    # 4 KiB cap: first entry fits, second does not
+    cache = SequenceInferenceCache(max_size_gb=4096 / 1024**3)
+
+    cache.cached_call(fn, ["seq_A"])
+    assert fn.call_count == 1
+    assert cache.current_size_bytes > 0
+    first_size = cache.current_size_bytes
+
+    cache.cached_call(fn, ["seq_B"])
+    assert fn.call_count == 2
+    assert cache.current_size_bytes == first_size
+    assert cache.is_full
+
+    cache.cached_call(fn, ["seq_A"])
+    assert fn.call_count == 2
+    result = cache.cached_call(fn, ["seq_A"])
+    assert fn.call_count == 2
+    np.testing.assert_array_equal(result[0], output_a)
 
 
 # ---------------------------------------------------------------------------
