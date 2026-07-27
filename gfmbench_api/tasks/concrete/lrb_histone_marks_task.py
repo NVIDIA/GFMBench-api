@@ -41,7 +41,7 @@ class LRBHistoneMarksTask(BaseGFMSupervisedMultiLabelTask):
     DEFAULT_NUM_TRACKS = 20
 
     def _get_default_max_seq_len(self) -> int:
-        # Builder requires >=200bp; effective window is min(this, model max).
+        # Builder requires >=200bp.
         return 100000
 
     def _get_num_labels(self) -> int:

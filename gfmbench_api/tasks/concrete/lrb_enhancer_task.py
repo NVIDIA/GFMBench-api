@@ -37,8 +37,7 @@ class LRBEnhancerTask(BaseGFMSupervisedSingleSeqTask):
     """
 
     def _get_default_max_seq_len(self) -> int:
-        # Builder default context is 100kb; the effective window is
-        # min(this, model max) so the model's own max length drives it.
+        # Builder default context is 100kb.
         return 100000
 
     def _get_num_labels(self) -> int:
