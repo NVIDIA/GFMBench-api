@@ -9,3 +9,4 @@ __pycache__/
 # Pipeline logs from usage_examples/run_benchmark.py (logutils.init_logger → logs/)
 logs/
 .cursor/rules/shell-environment.mdc
+*.egg-info/
