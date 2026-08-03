@@ -28,15 +28,18 @@ class RegressionPearsonR(BaseMetric):
     """
 
     def reset(self):
+        """Reset internal storage."""
         super().reset()
         self._pred_list = []
         self._target_list = []
 
     @property
     def name(self):
+        """Return the key name for results dictionary."""
         return "regression_pearsonr_macro"
 
     def _calc_impl(self, preds, targets):
+        """Store predictions and targets for Pearson r calculation."""
         preds = np.asarray(preds, dtype=np.float64)
         targets = np.asarray(targets, dtype=np.float64)
         # Collapse leading dimensions to rows, keeping outputs as columns.
@@ -46,6 +49,7 @@ class RegressionPearsonR(BaseMetric):
 
     @staticmethod
     def _pearson(x: np.ndarray, y: np.ndarray) -> float:
+        """Return Pearson r for one output, or NaN when either input is constant."""
         x = x - x.mean()
         y = y - y.mean()
         denom = np.sqrt((x * x).sum() * (y * y).sum())
@@ -54,8 +58,11 @@ class RegressionPearsonR(BaseMetric):
         return float((x * y).sum() / denom)
 
     def get_final_results(self):
+        """Calculate the mean per-output Pearson r from stored predictions."""
         if not self._pred_list:
             return None
+
+        # Concatenate all batches
         preds = np.concatenate(self._pred_list, axis=0)
         targets = np.concatenate(self._target_list, axis=0)
 

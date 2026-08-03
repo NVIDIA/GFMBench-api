@@ -20,24 +20,37 @@ from .base_metric import BaseMetric
 
 
 class MultiLabelClassificationAUROC(BaseMetric):
-    """Macro AUROC over independent binary labels."""
+    """
+    Macro AUROC over independent binary labels (multi-label classification).
+
+    Receives per-label sigmoid probabilities of shape [batch, num_labels] and
+    binary ground-truth labels of the same shape. AUROC is computed per label
+    (one-vs-rest is not applicable since labels are independent) and averaged
+    over labels that contain both classes.
+    """
 
     def reset(self):
+        """Reset internal storage."""
         super().reset()
         self._probs_list = []
         self._gt_list = []
 
     @property
     def name(self):
+        """Return the key name for results dictionary."""
         return "multilabel_auroc_macro"
 
     def _calc_impl(self, probs, gt):
+        """Store probabilities and labels for AUROC calculation."""
         self._probs_list.append(np.asarray(probs))
         self._gt_list.append(np.asarray(gt))
 
     def get_final_results(self):
+        """Calculate the mean per-label AUROC from stored probabilities."""
         if not self._probs_list:
             return None
+
+        # Concatenate all batches
         probs = np.concatenate(self._probs_list, axis=0)
         gt = np.concatenate(self._gt_list, axis=0)
         if probs.ndim != 2:
@@ -46,6 +59,7 @@ class MultiLabelClassificationAUROC(BaseMetric):
         scores = []
         for label_idx in range(probs.shape[1]):
             y_true = gt[:, label_idx]
+            # AUROC is undefined when only one class is present in a label.
             if np.unique(y_true).size < 2:
                 continue
             scores.append(roc_auc_score(y_true, probs[:, label_idx]))

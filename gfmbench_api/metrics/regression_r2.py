@@ -27,20 +27,23 @@ class RegressionR2(BaseMetric):
     output, R^2 = 1 - SS_res / SS_tot is computed for each output, and their
     mean is returned. This differs from squared Pearson correlation.
 
-    Tracks whose targets are constant (``SS_tot == 0``) have an undefined R^2 and
+    Outputs whose targets are constant (``SS_tot == 0``) have an undefined R^2 and
     are skipped in the macro average.
     """
 
     def reset(self):
+        """Reset internal storage."""
         super().reset()
         self._pred_list = []
         self._target_list = []
 
     @property
     def name(self):
+        """Return the key name for results dictionary."""
         return "regression_r2_macro"
 
     def _calc_impl(self, preds, targets):
+        """Store predictions and targets for R^2 calculation."""
         preds = np.asarray(preds, dtype=np.float64)
         targets = np.asarray(targets, dtype=np.float64)
         # Collapse leading dimensions to rows, keeping outputs as columns.
@@ -50,6 +53,7 @@ class RegressionR2(BaseMetric):
 
     @staticmethod
     def _r2(y_true: np.ndarray, y_pred: np.ndarray) -> float:
+        """Return R^2 for one output, or NaN when the targets are constant."""
         ss_tot = float(((y_true - y_true.mean()) ** 2).sum())
         if ss_tot <= 0:
             return np.nan
@@ -57,8 +61,11 @@ class RegressionR2(BaseMetric):
         return 1.0 - ss_res / ss_tot
 
     def get_final_results(self):
+        """Calculate the mean per-output R^2 from stored predictions."""
         if not self._pred_list:
             return None
+
+        # Concatenate all batches
         preds = np.concatenate(self._pred_list, axis=0)
         targets = np.concatenate(self._target_list, axis=0)
 
