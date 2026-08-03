@@ -360,11 +360,13 @@ To add a new concrete task, inherit from the appropriate base class based on you
 
 Choose the appropriate base class based on your task:
 
-- **Supervised Single-Sequence Classification**: Inherit from `BaseGFMSupervisedSingleSeqTask`
-  - For tasks with single DNA sequences and categorical labels (e.g., promoter prediction, splice site detection)
-  
-- **Supervised Variant Effect Prediction**: Inherit from `BaseGFMSupervisedVariantEffectTask`
-  - For tasks with paired reference/variant sequences and categorical labels (e.g., pathogenic variant classification)
+- **Supervised Classification**: Inherit from `BaseGFMSupervisedClassificationTask`
+  - Set `classification_mode` to `"single_label"` or `"multi_label"`
+  - Set `input_structure` to `"sequence"` or `"variant_reference_pair"`
+
+- **Supervised Regression**: Inherit from `BaseGFMSupervisedRegressionTask`
+  - Set `output_spatiality = "sequence"` for `[batch, num_outputs]` targets or
+    `"binned"` for `[batch, num_bins, num_outputs]` targets
   
 - **Zero-Shot SNV Variant Effect**: Inherit from `BaseGFMZeroShotSNVTask`
   - For zero-shot evaluation of single-nucleotide variants (SNVs) with equal-length reference and variant sequences
@@ -386,9 +388,15 @@ All concrete tasks must implement:
      - `self.max_num_samples`: Limit the number of samples per split if specified (for sanity testing with smaller datasets)
 4. **`get_conditional_input_meta_data_frame() -> Optional[pd.DataFrame]`**: Return metadata DataFrame if task uses conditional inputs, otherwise return `None`
 
-Additional methods for supervised tasks:
+Additional methods for supervised classification tasks:
 
-5. **`_get_num_labels() -> int`**: Return the number of classification labels
+5. **`_get_num_classes() -> int`**: For single-label tasks, return the number of classes
+6. **`_get_num_labels() -> int`**: For multi-label tasks, return the number of
+   independent binary targets
+
+Additional methods for supervised regression tasks:
+
+5. **`_get_num_outputs() -> int`**: Return the number of continuous outputs per sequence or bin
 
 Additional methods for zero-shot tasks:
 
@@ -396,20 +404,20 @@ Additional methods for zero-shot tasks:
 ### Example: Supervised Single-Sequence Task
 
 ```python
-from gfmbench_api.tasks.base.base_gfm_supervised_single_seq_task import BaseGFMSupervisedSingleSeqTask
+from gfmbench_api.tasks.base import BaseGFMSupervisedClassificationTask
 import os
 import pandas as pd
 import torch
 import numpy as np
 
-class MyCustomTask(BaseGFMSupervisedSingleSeqTask):
+class MyCustomTask(BaseGFMSupervisedClassificationTask):
     def get_task_name(self) -> str:
         return "my_custom_task"
     
     def _get_default_max_seq_len(self) -> int:
         return 512
     
-    def _get_num_labels(self) -> int:
+    def _get_num_classes(self) -> int:
         return 2  # Binary classification
     
     def _create_datasets(self):

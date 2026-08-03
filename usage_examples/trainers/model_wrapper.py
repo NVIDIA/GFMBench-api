@@ -31,7 +31,8 @@ class GFMWithProjection(BaseGFMModel):
     """
     
     def __init__(self, base_model: BaseGFMModel, projection_layer: Optional[nn.Module] = None,
-                 cache_size: Optional[float] = None) -> None:
+                 cache_size: Optional[float] = None,
+                 classification_mode: str = "single_label") -> None:
         """
         Initialize the wrapped model.
         
@@ -44,6 +45,7 @@ class GFMWithProjection(BaseGFMModel):
         self.projection_layer: Optional[nn.Module] = projection_layer
         self.device: str = base_model.device
         self.cache_size = cache_size
+        self.classification_mode = classification_mode
         self._ref_cache = SequenceInferenceCache(max_size_gb=cache_size)
 
     def clear_ref_cache(self) -> None:
@@ -78,6 +80,19 @@ class GFMWithProjection(BaseGFMModel):
                 return probs.cpu().numpy()
         else:
             return sequence_repr_np
+
+    def infer_sequence_to_multilabel_probs(
+        self, sequences: List[str], conditional_input=None
+    ) -> Optional[np.ndarray]:
+        """Return independent sigmoid probabilities for each label."""
+        _, _, sequence_repr_np = self.base_model.infer_sequence_to_sequence(
+            sequences, conditional_input
+        )
+        if sequence_repr_np is None or self.projection_layer is None:
+            return None
+        with torch.no_grad():
+            sequence_repr = torch.from_numpy(sequence_repr_np).to(self.device)
+            return torch.sigmoid(self.projection_layer(sequence_repr)).cpu().numpy()
     
     def infer_sequence_to_sequence(self, sequences: List[str], conditional_input=None) -> Tuple[Optional[np.ndarray], Optional[np.ndarray], Optional[np.ndarray]]:
         """
@@ -218,5 +233,29 @@ class GFMWithProjection(BaseGFMModel):
                 return probs.cpu().numpy()
         else:
             return None
+
+    def infer_variant_ref_sequences_to_multilabel_probs(
+        self,
+        variant_sequences: List[str],
+        ref_sequences: List[str],
+        conditional_input=None,
+    ) -> Optional[np.ndarray]:
+        """Return independent sigmoid probabilities for paired-sequence labels."""
+        _, _, var_repr_np = self.base_model.infer_sequence_to_sequence(
+            variant_sequences, conditional_input
+        )
+        _, _, ref_repr_np = self._ref_cache.cached_call(
+            self.base_model.infer_sequence_to_sequence,
+            ref_sequences,
+            conditional_input,
+            disable=self.cache_size == 0,
+        )
+        if var_repr_np is None or ref_repr_np is None or self.projection_layer is None:
+            return None
+        with torch.no_grad():
+            var_repr = torch.from_numpy(var_repr_np).to(self.device)
+            ref_repr = torch.from_numpy(ref_repr_np).to(self.device)
+            combined_repr = torch.cat([var_repr, ref_repr], dim=1)
+            return torch.sigmoid(self.projection_layer(combined_repr)).cpu().numpy()
 
 

@@ -23,13 +23,19 @@ import pandas as pd
 import torch
 from torch.utils.data import Dataset
 
-from gfmbench_api.tasks.base.base_gfm_supervised_single_seq_task import BaseGFMSupervisedSingleSeqTask
+from gfmbench_api.tasks.base.base_gfm_supervised_classification_task import (
+    BaseGFMSupervisedClassificationTask,
+)
 import numpy as np
 from gfmbench_api.utils.fileutils import download_hf_dataset_files
 from gfmbench_api.utils.preprocutils import truncate_sequence_from_ends
 
-class GueTranscriptionFactorTask(BaseGFMSupervisedSingleSeqTask):
+class GueTranscriptionFactorTask(BaseGFMSupervisedClassificationTask):
     """GUE Transcription Factor prediction task (binary classification)."""
+
+    classification_mode = "single_label"
+    input_structure = "sequence"
+
     def __init__(self, root_data_dir_path: str,
                  task_config: Optional[Dict[str, Any]] = None):
         # HuggingFace dataset source
@@ -42,7 +48,7 @@ class GueTranscriptionFactorTask(BaseGFMSupervisedSingleSeqTask):
         """Return task's default maximum sequence length (100bp)."""
         return 100
     
-    def _get_num_labels(self):
+    def _get_num_classes(self):
         """Return 2 (binary: TF binding site vs non-binding site)."""
         return 2
 

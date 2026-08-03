@@ -23,7 +23,9 @@ import pandas as pd
 import torch
 from datasets import DatasetDict
 
-from gfmbench_api.tasks.base.base_gfm_supervised_variant_effect_task import BaseGFMSupervisedVariantEffectTask
+from gfmbench_api.tasks.base.base_gfm_supervised_classification_task import (
+    BaseGFMSupervisedClassificationTask,
+)
 import numpy as np
 from gfmbench_api.utils.fileutils import download_hf_dataset_files
 from gfmbench_api.utils.preprocutils import build_forward_centered_seqs
@@ -52,7 +54,7 @@ def get_fold_split(fold: Optional[int] = None, split_name: str = 'test') -> List
         raise ValueError(f'Unknown split name: {split_name}, should be test')
 
 
-class VariantBenchmarksSQTLTask(BaseGFMSupervisedVariantEffectTask):
+class VariantBenchmarksSQTLTask(BaseGFMSupervisedClassificationTask):
     """
     Variant sQTL prediction task from m42-health/variant-benchmark dataset -
     Predicting whether a genetic variant influences alternative splicing patterns.
@@ -79,6 +81,9 @@ class VariantBenchmarksSQTLTask(BaseGFMSupervisedVariantEffectTask):
 
     In order to support the general "ref_seq", "alt_seq", "label" format, this task optionally extracts forward-strand, SNP-centered var and ref sequences
     """
+    classification_mode = "single_label"
+    input_structure = "variant_reference_pair"
+
     def __init__(self, root_data_dir_path: str,
                  task_config: Optional[Dict[str, Any]] = None):
         # HuggingFace dataset source
@@ -93,7 +98,7 @@ class VariantBenchmarksSQTLTask(BaseGFMSupervisedVariantEffectTask):
         """Return task's default maximum sequence length (1024bp)."""
         return 1024 # Reported paper's default
     
-    def _get_num_labels(self):
+    def _get_num_classes(self):
         """Return 2 (binary: affects alternative splicing vs. not)."""
         return 2
 

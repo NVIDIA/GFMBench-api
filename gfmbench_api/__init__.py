@@ -24,9 +24,8 @@ directly from their modules under ``gfmbench_api.tasks.concrete``.
 from gfmbench_api.tasks.base import (
     BaseGFMModel,
     BaseGFMTask,
-    BaseGFMSupervisedMultiClassTask,
-    BaseGFMSupervisedSingleSeqTask,
-    BaseGFMSupervisedVariantEffectTask,
+    BaseGFMSupervisedClassificationTask,
+    BaseGFMSupervisedRegressionTask,
     BaseGFMZeroShotGeneralIndelTask,
     BaseGFMZeroShotSNVTask,
     BaseGFMZeroShotTask,
@@ -35,9 +34,8 @@ from gfmbench_api.tasks.base import (
 __all__ = [
     "BaseGFMModel",
     "BaseGFMTask",
-    "BaseGFMSupervisedMultiClassTask",
-    "BaseGFMSupervisedSingleSeqTask",
-    "BaseGFMSupervisedVariantEffectTask",
+    "BaseGFMSupervisedClassificationTask",
+    "BaseGFMSupervisedRegressionTask",
     "BaseGFMZeroShotTask",
     "BaseGFMZeroShotSNVTask",
     "BaseGFMZeroShotGeneralIndelTask",

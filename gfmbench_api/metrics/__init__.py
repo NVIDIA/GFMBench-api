@@ -21,8 +21,8 @@ from .multilabel_classification_auroc import MultiLabelClassificationAUROC
 from .multilabel_classification_auprc import MultiLabelClassificationAUPRC
 from .multitrack_binary_auroc import MultiTrackBinaryAUROC
 from .multitrack_binary_auprc import MultiTrackBinaryAUPRC
-from .binned_regression_pearsonr import BinnedRegressionPearsonR
-from .binned_regression_r2 import BinnedRegressionR2
+from .regression_pearsonr import RegressionPearsonR
+from .regression_r2 import RegressionR2
 from .snv_variant_effect_cosine_sim_auroc import SNVVariantEffectCosineSimAUROC
 from .snv_variant_effect_cosine_sim_auprc import SNVVariantEffectCosineSimAUPRC
 from .snv_variant_effect_prediction_masked_llr_auroc import SNVVariantEffectPredictionMaskedLLRAUROC
@@ -43,8 +43,8 @@ __all__ = [
     'MultiLabelClassificationAUPRC',
     'MultiTrackBinaryAUROC',
     'MultiTrackBinaryAUPRC',
-    'BinnedRegressionPearsonR',
-    'BinnedRegressionR2',
+    'RegressionPearsonR',
+    'RegressionR2',
     'SNVVariantEffectCosineSimAUROC',
     'SNVVariantEffectCosineSimAUPRC',
     'SNVVariantEffectPredictionMaskedLLRAUROC',

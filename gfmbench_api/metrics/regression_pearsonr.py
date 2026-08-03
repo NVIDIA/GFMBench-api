@@ -19,12 +19,12 @@ import numpy as np
 from .base_metric import BaseMetric
 
 
-class BinnedRegressionPearsonR(BaseMetric):
-    """Macro Pearson correlation over tracks for binned-regression tasks.
+class RegressionPearsonR(BaseMetric):
+    """Macro Pearson correlation over outputs for regression tasks.
 
-    Receives predictions and targets of shape [batch, num_bins, num_tracks]
-    (binned tracks, e.g. CAGE). All (sample, bin) pairs are pooled per track,
-    Pearson r is computed for each track, and the mean over tracks is returned.
+    Receives predictions and targets of shape [batch, num_outputs] or
+    [batch, num_bins, num_outputs]. All leading dimensions are pooled per
+    output, Pearson r is computed for each output, and their mean is returned.
     """
 
     def reset(self):
@@ -39,10 +39,10 @@ class BinnedRegressionPearsonR(BaseMetric):
     def _calc_impl(self, preds, targets):
         preds = np.asarray(preds, dtype=np.float64)
         targets = np.asarray(targets, dtype=np.float64)
-        # Collapse leading dims (batch, bins) -> rows, keep tracks as columns.
-        num_tracks = preds.shape[-1]
-        self._pred_list.append(preds.reshape(-1, num_tracks))
-        self._target_list.append(targets.reshape(-1, num_tracks))
+        # Collapse leading dimensions to rows, keeping outputs as columns.
+        num_outputs = preds.shape[-1]
+        self._pred_list.append(preds.reshape(-1, num_outputs))
+        self._target_list.append(targets.reshape(-1, num_outputs))
 
     @staticmethod
     def _pearson(x: np.ndarray, y: np.ndarray) -> float:

@@ -23,13 +23,13 @@ from typing import Any, Dict, Optional, Tuple
 import pandas as pd
 from torch.utils.data import Dataset
 
-from gfmbench_api.tasks.base.base_gfm_supervised_binned_regression_task import (
-    BaseGFMSupervisedBinnedRegressionTask,
+from gfmbench_api.tasks.base.base_gfm_supervised_regression_task import (
+    BaseGFMSupervisedRegressionTask,
 )
 from gfmbench_api.utils.lrb_local import build_cage_examples
 
 
-class LRBCagePredictionTask(BaseGFMSupervisedBinnedRegressionTask):
+class LRBCagePredictionTask(BaseGFMSupervisedRegressionTask):
     """LRB CAGE Prediction (binned multi-track regression).
 
     Predicts FANTOM5 CAGE expression (50 tracks, via Basenji/Enformer) in 128bp
@@ -45,11 +45,12 @@ class LRBCagePredictionTask(BaseGFMSupervisedBinnedRegressionTask):
     BIN_SIZE_BP = 128
     BUILDER_MAX_LENGTH = 114688  # 896 bins x 128bp (full Basenji/Enformer window)
     DEFAULT_NUM_TRACKS = 50
+    output_spatiality = "binned"
 
     def _get_default_max_seq_len(self) -> int:
         return self.BUILDER_MAX_LENGTH
 
-    def _get_num_labels(self) -> int:
+    def _get_num_outputs(self) -> int:
         return getattr(self, "_num_tracks", self.DEFAULT_NUM_TRACKS)
 
     def get_task_name(self) -> str:

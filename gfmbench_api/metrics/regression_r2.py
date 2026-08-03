@@ -19,14 +19,13 @@ import numpy as np
 from .base_metric import BaseMetric
 
 
-class BinnedRegressionR2(BaseMetric):
-    """Macro coefficient of determination (R^2) over tracks for binned regression.
+class RegressionR2(BaseMetric):
+    """Macro coefficient of determination (R^2) over regression outputs.
 
-    Receives predictions and targets of shape [batch, num_bins, num_tracks]
-    (binned tracks, e.g. CAGE). All (sample, bin) pairs are pooled per track,
-    R^2 = 1 - SS_res / SS_tot is computed for each track, and the mean over
-    tracks is returned. This is distinct from the (squared) Pearson correlation
-    reported by ``BinnedRegressionPearsonR``.
+    Receives predictions and targets of shape [batch, num_outputs] or
+    [batch, num_bins, num_outputs]. All leading dimensions are pooled per
+    output, R^2 = 1 - SS_res / SS_tot is computed for each output, and their
+    mean is returned. This differs from squared Pearson correlation.
 
     Tracks whose targets are constant (``SS_tot == 0``) have an undefined R^2 and
     are skipped in the macro average.
@@ -44,10 +43,10 @@ class BinnedRegressionR2(BaseMetric):
     def _calc_impl(self, preds, targets):
         preds = np.asarray(preds, dtype=np.float64)
         targets = np.asarray(targets, dtype=np.float64)
-        # Collapse leading dims (batch, bins) -> rows, keep tracks as columns.
-        num_tracks = preds.shape[-1]
-        self._pred_list.append(preds.reshape(-1, num_tracks))
-        self._target_list.append(targets.reshape(-1, num_tracks))
+        # Collapse leading dimensions to rows, keeping outputs as columns.
+        num_outputs = preds.shape[-1]
+        self._pred_list.append(preds.reshape(-1, num_outputs))
+        self._target_list.append(targets.reshape(-1, num_outputs))
 
     @staticmethod
     def _r2(y_true: np.ndarray, y_pred: np.ndarray) -> float:

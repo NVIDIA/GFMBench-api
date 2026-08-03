@@ -53,6 +53,29 @@ class BaseGFMModel(ABC):
             Probabilities for each label. Returns None if not implemented.
         """
         pass
+
+    def infer_sequence_to_regression(
+        self,
+        sequences: List[str],
+        conditional_input: Optional[np.ndarray] = None,
+    ) -> Optional[np.ndarray]:
+        """Return continuous predictions for a supervised regression task.
+
+        The task's ``output_spatiality`` determines the expected shape:
+        ``[batch_size, num_outputs]`` for sequence-level regression or
+        ``[batch_size, num_bins, num_outputs]`` for binned regression.
+
+        Models without a fitted regression head may return ``None``.
+        """
+        return None
+
+    def infer_sequence_to_multilabel_probs(
+        self,
+        sequences: List[str],
+        conditional_input: Optional[np.ndarray] = None,
+    ) -> Optional[np.ndarray]:
+        """Return independent per-label probabilities for sequence inputs."""
+        return None
     
     @abstractmethod
     def infer_sequence_to_sequence(
@@ -216,3 +239,12 @@ class BaseGFMModel(ABC):
             Probabilities for each label. Returns None if not implemented.
         """
         pass
+
+    def infer_variant_ref_sequences_to_multilabel_probs(
+        self,
+        variant_sequences: List[str],
+        ref_sequences: List[str],
+        conditional_input: Optional[np.ndarray] = None,
+    ) -> Optional[np.ndarray]:
+        """Return independent per-label probabilities for paired sequence inputs."""
+        return None

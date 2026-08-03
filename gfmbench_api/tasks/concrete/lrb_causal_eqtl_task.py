@@ -29,7 +29,9 @@ from pyfaidx import Fasta
 from typing import Any, Tuple, Optional, Dict, List
 
 # Framework Imports
-from gfmbench_api.tasks.base.base_gfm_supervised_variant_effect_task import BaseGFMSupervisedVariantEffectTask
+from gfmbench_api.tasks.base.base_gfm_supervised_classification_task import (
+    BaseGFMSupervisedClassificationTask,
+)
 from gfmbench_api.utils.fileutils import ensure_hf_hub_file, ensure_reference_genome
 from gfmbench_api.utils.preprocutils import standardize_sequence, pad_sequence_centered_variant
 
@@ -78,16 +80,19 @@ class _LRBCausalEqtlDataset(Dataset):
 
 
 # 2. Main Task Class
-class LRBCausalEqtlTask(BaseGFMSupervisedVariantEffectTask):
+class LRBCausalEqtlTask(BaseGFMSupervisedClassificationTask):
     """
     LRB Causal eQTL Task.
     Includes Data Loading and Twin-Tower Architecture Integration.
     """
 
+    classification_mode = "single_label"
+    input_structure = "variant_reference_pair"
+
     def get_task_name(self) -> str:
         return "lrb_variant_effect_causal_eqtl"
 
-    def _get_num_labels(self) -> int:
+    def _get_num_classes(self) -> int:
         return 2
 
     def _get_default_max_seq_len(self) -> int:

@@ -35,13 +35,14 @@ class GFMFinetuner:
         model, 
         train_loader,
         hidden_dim,
-        num_labels,
+        num_outputs,
         num_epochs,
         lr,
         optimizer_name="AdamW",
         weight_decay=0.01,
         only_proj_layer=True,
-        is_variant_effect_prediction=False,
+        classification_mode="single_label",
+        input_structure="sequence",
         cache_size: Optional[float] = None,
         device='cpu'
     ):
@@ -52,33 +53,39 @@ class GFMFinetuner:
             model: BaseGFMModel instance
             train_loader: DataLoader for training data
             hidden_dim: hidden dimension size of the model
-            num_labels: number of classification labels
+            num_outputs: projection-head width
             num_epochs: number of training epochs
             lr: learning rate
             optimizer_name: optimizer name ('Adam', 'AdamW', 'SGD')
             weight_decay: weight decay for regularization
             only_proj_layer: if True, only train projection layer; if False, train full model
-            is_variant_effect_prediction: if True, task uses variant/ref sequence pairs
+            classification_mode: "single_label" or "multi_label"
+            input_structure: "sequence" or "variant_reference_pair"
             cache_size: cache RAM limit in GB; None for unlimited, 0 disables caching
             device: torch device
         """
         self.model = model
         self.train_loader = train_loader
         self.hidden_dim = hidden_dim
-        self.num_labels = num_labels
+        self.num_outputs = num_outputs
         self.num_epochs = num_epochs
         self.lr = lr
         self.optimizer_name = optimizer_name
         self.weight_decay = weight_decay
         self.only_proj_layer = only_proj_layer
-        self.is_variant_effect_prediction = is_variant_effect_prediction
+        self.classification_mode = classification_mode
+        self.input_structure = input_structure
         self.cache_size = cache_size
         self.device = device
         
         # Create projection layer for classification
         # For variant effect tasks, input is concatenated embeddings (hidden_dim * 2)
-        proj_input_dim = self.hidden_dim * 2 if is_variant_effect_prediction else self.hidden_dim
-        self.projection = nn.Linear(proj_input_dim, self.num_labels).to(device)
+        proj_input_dim = (
+            self.hidden_dim * 2
+            if input_structure == "variant_reference_pair"
+            else self.hidden_dim
+        )
+        self.projection = nn.Linear(proj_input_dim, self.num_outputs).to(device)
     
     def _get_optimizer(self, params):
         """
@@ -118,8 +125,11 @@ class GFMFinetuner:
         # Initialize optimizer
         optimizer = self._get_optimizer(params)
         
-        # Loss function for classification
-        criterion = torch.nn.CrossEntropyLoss()
+        criterion = (
+            torch.nn.BCEWithLogitsLoss()
+            if self.classification_mode == "multi_label"
+            else torch.nn.CrossEntropyLoss()
+        )
         
         # Set to training mode
         if not self.only_proj_layer:
@@ -137,7 +147,7 @@ class GFMFinetuner:
             
             progress_bar = tqdm(self.train_loader, desc=f"Fine-tuning epoch {epoch+1}/{self.num_epochs}")
             for batch in progress_bar:
-                if self.is_variant_effect_prediction:
+                if self.input_structure == "variant_reference_pair":
                     # Variant effect task: (variant_seqs, ref_seqs, labels, conditional_input)
                     variant_sequences, ref_sequences, labels, conditional_input = batch
                     labels = labels.to(self.device)
@@ -183,6 +193,9 @@ class GFMFinetuner:
                         sequence_repr = sequence_repr.detach()
                     else:
                         sequence_repr = self.model._sequence_to_representative(sequences)
+
+                if self.classification_mode == "multi_label":
+                    labels = labels.float()
                 
                 logits = self.projection(sequence_repr)
                 
@@ -210,7 +223,10 @@ class GFMFinetuner:
         
         # Return wrapped model with projection layer
         wrapped_model = GFMWithProjection(
-            self.model, self.projection, cache_size=self.cache_size
+            self.model,
+            self.projection,
+            cache_size=self.cache_size,
+            classification_mode=self.classification_mode,
         )
         wrapped_model.eval()  # Set to eval mode after training
         return wrapped_model

@@ -22,9 +22,8 @@ This module exports:
 - BaseGFMTask: Abstract base for all GFM tasks
 
 Supervised task hierarchy:
-- BaseGFMSupervisedMultiClassTask: Base for supervised multi-class tasks
-  - BaseGFMSupervisedSingleSeqTask: For single sequence classification
-  - BaseGFMSupervisedVariantEffectTask: For variant effect classification
+- BaseGFMSupervisedClassificationTask: For single-label or multi-label classification
+- BaseGFMSupervisedRegressionTask: For sequence-level or binned regression
 
 Zero-shot task hierarchy:
 - BaseGFMZeroShotTask: Base for zero-shot evaluation tasks
@@ -36,9 +35,8 @@ from gfmbench_api.tasks.base.base_gfm_model import BaseGFMModel
 from gfmbench_api.tasks.base.base_gfm_task import BaseGFMTask
 
 # Supervised task hierarchy
-from gfmbench_api.tasks.base.base_gfm_supervised_multiclass_task import BaseGFMSupervisedMultiClassTask
-from gfmbench_api.tasks.base.base_gfm_supervised_single_seq_task import BaseGFMSupervisedSingleSeqTask
-from gfmbench_api.tasks.base.base_gfm_supervised_variant_effect_task import BaseGFMSupervisedVariantEffectTask
+from gfmbench_api.tasks.base.base_gfm_supervised_classification_task import BaseGFMSupervisedClassificationTask
+from gfmbench_api.tasks.base.base_gfm_supervised_regression_task import BaseGFMSupervisedRegressionTask
 
 # Zero-shot task hierarchy
 from gfmbench_api.tasks.base.base_gfm_zero_shot_task import BaseGFMZeroShotTask
@@ -50,9 +48,8 @@ __all__ = [
     "BaseGFMModel",
     "BaseGFMTask",
     # Supervised task hierarchy
-    "BaseGFMSupervisedMultiClassTask",
-    "BaseGFMSupervisedSingleSeqTask",
-    "BaseGFMSupervisedVariantEffectTask",
+    "BaseGFMSupervisedClassificationTask",
+    "BaseGFMSupervisedRegressionTask",
     # Zero-shot task hierarchy
     "BaseGFMZeroShotTask",
     "BaseGFMZeroShotSNVTask",

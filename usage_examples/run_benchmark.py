@@ -363,10 +363,19 @@ def main(argv=None):
             model.load_checkpoint(checkpoint_path)
 
         if has_finetuning_data:
-            # Fine-tune for classification tasks
             hidden_dim = model.get_hidden_dim()
-            num_labels = task_attrs["num_labels"]
-            is_variant_effect = task_attrs.get("is_variant_effect_prediction", False)
+            task_type = task_attrs["task_type"]
+            if task_type != "classification":
+                raise NotImplementedError(
+                    "The usage-example fine-tuner currently supports classification only."
+                )
+            classification_mode = task_attrs["classification_mode"]
+            input_structure = task_attrs["input_structure"]
+            num_outputs = (
+                task_attrs["num_classes"]
+                if classification_mode == "single_label"
+                else task_attrs["num_labels"]
+            )
             
             train_dataset = task.get_finetune_dataset()
 
@@ -385,13 +394,14 @@ def main(argv=None):
                 model=model,
                 train_loader=train_loader,
                 hidden_dim=hidden_dim,
-                num_labels=num_labels,
+                num_outputs=num_outputs,
                 num_epochs=training_params["num_epochs"],
                 lr=training_params["lr"],
                 optimizer_name=training_params["optimizer"],
                 weight_decay=training_params["weight_decay"],
                 only_proj_layer=training_params["only_proj_layer"],
-                is_variant_effect_prediction=is_variant_effect,
+                classification_mode=classification_mode,
+                input_structure=input_structure,
                 cache_size=args.cache_size,
                 device=device
             )
