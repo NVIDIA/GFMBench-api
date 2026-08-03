@@ -15,12 +15,12 @@
 
 # This module does not embed third-party data download URLs.
 from .base_metric import BaseMetric
-from .multilabel_classification_accuracy import MultiLabelClassificationAccuracy
-from .multilabel_classification_mcc import MultiLabelClassificationMCC
+from .classification_accuracy import ClassificationAccuracy
+from .classification_mcc import ClassificationMCC
+from .classification_auroc import ClassificationAUROC
+from .classification_auprc import ClassificationAUPRC
 from .multilabel_classification_auroc import MultiLabelClassificationAUROC
 from .multilabel_classification_auprc import MultiLabelClassificationAUPRC
-from .multitrack_binary_auroc import MultiTrackBinaryAUROC
-from .multitrack_binary_auprc import MultiTrackBinaryAUPRC
 from .regression_pearsonr import RegressionPearsonR
 from .regression_r2 import RegressionR2
 from .snv_variant_effect_cosine_sim_auroc import SNVVariantEffectCosineSimAUROC
@@ -37,12 +37,12 @@ from .snv_variant_effect_prediction_llr_auroc import SNVVariantEffectPredictionL
 
 __all__ = [
     'BaseMetric',
-    'MultiLabelClassificationAccuracy',
-    'MultiLabelClassificationMCC',
+    'ClassificationAccuracy',
+    'ClassificationMCC',
+    'ClassificationAUROC',
+    'ClassificationAUPRC',
     'MultiLabelClassificationAUROC',
     'MultiLabelClassificationAUPRC',
-    'MultiTrackBinaryAUROC',
-    'MultiTrackBinaryAUPRC',
     'RegressionPearsonR',
     'RegressionR2',
     'SNVVariantEffectCosineSimAUROC',

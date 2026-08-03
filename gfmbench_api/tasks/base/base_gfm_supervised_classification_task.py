@@ -21,12 +21,12 @@ from torch.utils.data import DataLoader, Dataset
 from tqdm import tqdm
 
 from gfmbench_api.metrics import (
-    MultiLabelClassificationAccuracy,
+    ClassificationAccuracy,
+    ClassificationAUPRC,
+    ClassificationAUROC,
+    ClassificationMCC,
     MultiLabelClassificationAUPRC,
     MultiLabelClassificationAUROC,
-    MultiLabelClassificationMCC,
-    MultiTrackBinaryAUPRC,
-    MultiTrackBinaryAUROC,
 )
 from gfmbench_api.tasks.base.base_gfm_task import BaseGFMTask
 
@@ -140,13 +140,16 @@ class BaseGFMSupervisedClassificationTask(BaseGFMTask):
             dataset, batch_size=self.batch_size, shuffle=False, num_workers=self.num_workers
         )
         if self.classification_mode == "multi_label":
-            metrics = [MultiTrackBinaryAUROC(), MultiTrackBinaryAUPRC()]
-        else:
             metrics = [
-                MultiLabelClassificationAccuracy(),
-                MultiLabelClassificationMCC(),
                 MultiLabelClassificationAUROC(),
                 MultiLabelClassificationAUPRC(),
+            ]
+        else:
+            metrics = [
+                ClassificationAccuracy(),
+                ClassificationMCC(),
+                ClassificationAUROC(),
+                ClassificationAUPRC(),
             ]
 
         for batch in tqdm(data_loader, desc="Evaluating"):
