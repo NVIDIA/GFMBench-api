@@ -44,37 +44,48 @@ class InputStructure(str, Enum):
 
 
 class BaseGFMSupervisedClassificationTask(BaseGFMSupervisedTask):
-    """Base class for supervised single-label and multi-label classification.
+    """
+    Base class for supervised classification tasks.
+    Implements testing for both single-label and multi-label classification tasks.
 
-    Classification mode is derived from ``_get_num_labels``: one label is
-    single-label classification, while multiple labels are independent binary
-    targets. Input routing is supplied by a concrete classification base.
+    The classification mode is derived from the number of labels: a task with one
+    label is single-label (one distribution over num_classes classes), and a task
+    with several labels is multi-label (one independent binary target per label).
 
-    Subclasses must implement ``_get_num_labels``, ``_get_num_classes``,
-    ``_create_datasets``, ``get_task_name``, ``_get_default_max_seq_len`` and
-    ``get_conditional_input_meta_data_frame``. The single-sequence and
-    variant-effect bases provide the input-specific batch routing.
+    Subclasses must implement:
+        - _get_input_structure(): Return the input structure of the task
+        - _batch_to_probs(batch, model): Extract probs and labels from a batch
+        - _get_num_labels(): Return number of independent classification targets
+        - _get_num_classes(): Return number of classes per target
+        - _create_datasets(): Return train, validation, test datasets
+        - get_task_name(): Return task name
+        - _get_default_max_seq_len(): Return default max sequence length
     """
 
     @abstractmethod
     def _get_num_classes(self) -> int:
-        """Return classes per label (two for independent multi-label targets)."""
+        """Subclasses must implement this: return number of classes per target"""
         pass
 
     def _get_classification_mode(self) -> ClassificationMode:
-        """Derive single-label or multi-label semantics from label count."""
+        """Return single-label for tasks with one label, multi-label otherwise."""
         if self._get_num_labels() == 1:
             return ClassificationMode.SINGLE_LABEL
         return ClassificationMode.MULTI_LABEL
 
     def _get_output_dim(self) -> int:
-        """Return projection-head width for the derived classification mode."""
+        """
+        Return the expected width of the model output.
+
+        Single-label tasks output one probability per class, multi-label tasks
+        output one probability per label.
+        """
         if self._get_classification_mode() == ClassificationMode.SINGLE_LABEL:
             return self._get_num_classes()
         return self._get_num_labels()
 
     def _validate_classification_methods(self) -> None:
-        """Validate values returned by the classification contract methods."""
+        """Verify that the values declared by the subclass are consistent."""
         input_structure = self._get_input_structure()
         if not isinstance(input_structure, InputStructure):
             raise TypeError(
@@ -90,7 +101,7 @@ class BaseGFMSupervisedClassificationTask(BaseGFMSupervisedTask):
             raise ValueError("multi_label classification requires binary labels")
 
     def get_task_attributes(self) -> Dict[str, Any]:
-        """Return classification semantics and input-layout attributes."""
+        """Return task attributes for classification tasks."""
         self._validate_classification_methods()
         classification_mode = self._get_classification_mode()
         return {
@@ -105,26 +116,33 @@ class BaseGFMSupervisedClassificationTask(BaseGFMSupervisedTask):
         }
 
     def _eval_dataset(self, model: Any, dataset: Any) -> Dict[str, Optional[float]]:
-        """Evaluate a classification dataset.
+        """
+        Evaluate the model on the given dataset.
 
         Args:
-            model: Model implementing the inference method selected by the
-                concrete input-routing base.
-            dataset: Dataset to evaluate.
+            model: Model instance to evaluate (must implement the appropriate inference method)
+            dataset: The dataset to evaluate on.
 
         Returns:
-            Single-label tasks report accuracy, MCC, AUROC and AUPRC.
-            Multi-label tasks report macro AUROC and macro AUPRC.
+            dict: Scores with metric names as keys.
+                For single-label tasks:
+                - 'classification_accuracy': Accuracy score (0-1)
+                - 'classification_mcc': Matthews Correlation Coefficient
+                - 'classification_auroc': Area Under ROC Curve
+                - 'classification_auprc': Area Under Precision-Recall Curve
+                For multi-label tasks:
+                - 'multilabel_auroc_macro': Area Under ROC Curve, averaged over labels
+                - 'multilabel_auprc_macro': Area Under Precision-Recall Curve, averaged over labels
         """
         self._validate_classification_methods()
         classification_mode = self._get_classification_mode()
 
-        # Create a DataLoader from the evaluation dataset.
+        # Create dataloader from dataset
         data_loader = DataLoader(
             dataset, batch_size=self.batch_size, shuffle=False, num_workers=self.num_workers
         )
 
-        # Select metrics that match the derived target semantics.
+        # Initialize metric classes matching the classification mode
         if classification_mode == ClassificationMode.MULTI_LABEL:
             metrics = [
                 MultiLabelClassificationAUROC(),
@@ -139,7 +157,7 @@ class BaseGFMSupervisedClassificationTask(BaseGFMSupervisedTask):
             ]
 
         for batch in tqdm(data_loader, desc="Evaluating"):
-            # Delegate input-specific unpacking and inference to the child base.
+            # Delegate to subclass for batch processing
             probs, labels = self._batch_to_probs(batch, model)
             labels_np = (
                 labels.detach().cpu().numpy()
@@ -147,8 +165,9 @@ class BaseGFMSupervisedClassificationTask(BaseGFMSupervisedTask):
                 else np.asarray(labels)
             )
 
+            # Verify model output is valid
             if probs is not None:
-                # Verify that the model output matches the expected head width.
+                # Verify that the number of predictions matches the expected output width
                 probs = np.asarray(probs)
                 output_dim = self._get_output_dim()
                 assert probs.ndim == 2 and probs.shape[1] == output_dim, (
@@ -156,7 +175,8 @@ class BaseGFMSupervisedClassificationTask(BaseGFMSupervisedTask):
                     f"but got {probs.shape}"
                 )
                 if classification_mode == ClassificationMode.SINGLE_LABEL:
-                    # Single-label class probabilities must form a distribution.
+                    # Verify that probabilities sum to 1 (with epsilon tolerance).
+                    # Multi-label probabilities are independent, so they are not checked.
                     prob_sums = probs.sum(axis=1)
                     assert np.allclose(
                         prob_sums, np.ones_like(prob_sums), atol=1e-5
@@ -165,27 +185,38 @@ class BaseGFMSupervisedClassificationTask(BaseGFMSupervisedTask):
                         f"Got range [{prob_sums.min():.6f}, {prob_sums.max():.6f}]"
                     )
 
-            # Accumulate intermediate values for every selected metric.
+            # Calculate intermediate values for each metric
             for metric in metrics:
                 metric.calc(probs, labels_np)
 
-        # Use each metric's public name as its result key.
+        # Get final results dynamically using metric.name as the result key
         return {metric.name: metric.get_final_results() for metric in metrics}
 
     @abstractmethod
     def _get_input_structure(self) -> InputStructure:
-        """Return the classification input layout."""
+        """Subclasses must implement this: return the input structure of the task"""
         pass
 
     @abstractmethod
     def _batch_to_probs(
         self, batch: Any, model: Any
     ) -> Tuple[Optional[np.ndarray], np.ndarray]:
-        """Extract probabilities and labels using input-specific inference.
+        """
+        Extract probabilities and labels from a batch using the model.
 
-        Concrete routing bases implement this for either
-        ``(sequence, label, conditional_input)`` or
-        ``(variant_sequence, reference_sequence, label, conditional_input)``
-        batches.
+        Subclasses must implement this to handle their specific batch format:
+        - Single sequence tasks: batch = (sequences, labels, conditional_input)
+        - Variant effect tasks: batch = (variant_sequences, ref_sequences, labels, conditional_input)
+
+        Args:
+            batch: A batch from the DataLoader (tuple of tensors/lists)
+            model: Model instance to use for inference
+
+        Returns:
+            Tuple of (probs, labels):
+                - probs: np.ndarray of shape [batch_size, num_classes] for single-label
+                  tasks, [batch_size, num_labels] for multi-label tasks, or None
+                - labels: labels of shape [batch_size] for single-label tasks,
+                  [batch_size, num_labels] for multi-label tasks
         """
         pass

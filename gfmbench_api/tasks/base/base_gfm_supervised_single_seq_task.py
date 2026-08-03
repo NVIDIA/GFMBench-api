@@ -25,51 +25,59 @@ from gfmbench_api.tasks.base.base_gfm_supervised_classification_task import (
 
 
 class BaseGFMSupervisedSingleSeqTask(BaseGFMSupervisedClassificationTask):
-    """Base class for supervised classification from one sequence.
+    """
+    Base class for single-sequence classification tasks.
 
-    Dataset format:
-        ``(sequence, label, conditional_input)`` tuples.
+    Dataset format: (sequence, label, conditional_input) tuples
+    Model inference: infer_sequence_to_labels_probs(sequences, conditional_input) for
+        single-label tasks, infer_sequence_to_multilabel_probs(sequences, conditional_input)
+        for multi-label tasks
 
-    Model inference:
-        - Single-label: ``infer_sequence_to_labels_probs``
-        - Multi-label: ``infer_sequence_to_multilabel_probs``
-
-    Subclasses must implement ``_get_num_labels``, ``_get_num_classes``,
-    ``_create_datasets``, ``get_task_name``, ``_get_default_max_seq_len`` and
-    ``get_conditional_input_meta_data_frame``.
+    Subclasses must implement:
+        - _get_num_labels(): Return number of independent classification targets
+        - _get_num_classes(): Return number of classes per target
+        - _create_datasets(): Return train, validation (or None), test datasets
+        - get_task_name(): Return task name
+        - _get_default_max_seq_len(): Return default max sequence length
+        - get_conditional_input_meta_data_frame(): Return metadata schema for conditional inputs or None
     """
 
     def _get_input_structure(self) -> InputStructure:
-        """Return the single-sequence input layout."""
+        """Return the input structure of this task: a single sequence per example."""
         return InputStructure.SEQUENCE
 
     def _batch_to_probs(
         self, batch: Any, model: Any
     ) -> Tuple[Optional[np.ndarray], np.ndarray]:
-        """Extract probabilities and labels from a single-sequence batch.
+        """
+        Extract probabilities and labels from a single-sequence batch (the common approach).
 
         Args:
-            batch: ``(sequences, labels, conditional_input)`` from a DataLoader.
-            model: Model implementing the sequence inference method appropriate
-                for the derived classification mode.
+            batch: Tuple of (sequences, labels, conditional_input) from DataLoader
+            model: Model instance with infer_sequence_to_labels_probs method (single-label)
+                or infer_sequence_to_multilabel_probs method (multi-label)
 
         Returns:
-            A ``(probs, labels)`` tuple. ``probs`` is either ``None`` or an
-            array shaped ``[batch_size, output_dim]``; ``labels`` is returned
-            unchanged for conversion by the shared evaluation loop.
+            Tuple of (probs, labels):
+                - probs: np.ndarray of shape [batch_size, num_classes] for single-label
+                  tasks, [batch_size, num_labels] for multi-label tasks, or None
+                - labels: labels of shape [batch_size] for single-label tasks,
+                  [batch_size, num_labels] for multi-label tasks
         """
         sequences, labels, conditional_input = batch
 
-        # Multi-label tasks produce one independent probability per label;
-        # single-label tasks produce a normalized distribution over classes.
+        # Single-label tasks predict one distribution over classes, multi-label tasks
+        # predict one independent probability per label.
         method = (
             "infer_sequence_to_multilabel_probs"
             if self._get_classification_mode() == ClassificationMode.MULTI_LABEL
             else "infer_sequence_to_labels_probs"
         )
 
-        # Model inference methods return probabilities as NumPy arrays.
+        # Get probabilities from model (returns numpy arrays)
+        # Shape: [batch_size, output_dim] where output_dim = self._get_output_dim()
         probs, = self._safe_model_call(
             model, method, sequences, conditional_input, num_outputs=1
         )
+
         return probs, labels

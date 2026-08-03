@@ -32,26 +32,31 @@ class OutputSpatiality(str, Enum):
 
 
 class BaseGFMSupervisedRegressionTask(BaseGFMSupervisedTask):
-    """Base class for sequence-level and spatially binned regression tasks.
+    """
+    Base class for sequence-level and binned regression tasks (e.g. CAGE).
 
-    Each example is ``(sequence, labels, conditional_input)``. The value
-    returned by ``_get_output_spatiality`` determines the label and prediction
-    layout:
+    Dataset format: (sequence, label, conditional_input) tuples
+    Model inference: infer_sequence_to_regression(sequences, conditional_input)
 
-    * ``SEQUENCE``: ``[batch_size, num_labels]``
-    * ``BINNED``: ``[batch_size, num_bins, num_labels]``
+    The output spatiality determines the label and prediction layout:
+        - 'sequence': [batch_size, num_labels] - one value per label per sequence
+        - 'binned': [batch_size, num_bins, num_labels] - one value per label per bin,
+          where num_bins = sequence_length / bin_size_bp
 
-    Evaluation calls ``infer_sequence_to_regression`` and reports macro Pearson
-    r and macro R². For binned outputs, leading sample and bin dimensions are
-    pooled per label by the metrics.
+    Evaluation reports macro Pearson r and macro R^2, computed per label after pooling
+    all leading dimensions (samples, and bins for binned tasks).
 
-    Subclasses implement ``_get_output_spatiality`` and the inherited
-    ``_get_num_labels`` method, together with dataset creation, task naming,
-    default sequence length and conditional-input metadata methods.
+    Subclasses must implement:
+        - _get_output_spatiality(): Return 'sequence' or 'binned' output layout
+        - _get_num_labels(): Return number of regression outputs per sequence or bin
+        - _create_datasets(): Return train, validation, test datasets
+        - get_task_name(): Return task name
+        - _get_default_max_seq_len(): Return default max sequence length
+        - get_conditional_input_meta_data_frame(): Return metadata schema for conditional inputs or None
     """
 
     def get_task_attributes(self) -> Dict[str, Any]:
-        """Return regression objective and output-layout attributes."""
+        """Return task attributes for regression tasks."""
         output_spatiality = self._get_output_spatiality()
         if not isinstance(output_spatiality, OutputSpatiality):
             raise TypeError(
@@ -68,29 +73,31 @@ class BaseGFMSupervisedRegressionTask(BaseGFMSupervisedTask):
         }
 
     def _eval_dataset(self, model: Any, dataset: Any) -> Dict[str, Optional[float]]:
-        """Evaluate regression predictions with macro Pearson r and macro R².
+        """
+        Evaluate the model on the given dataset.
 
         Args:
-            model: Model implementing ``infer_sequence_to_regression``.
-            dataset: Dataset yielding sequence, label and conditional-input
-                tuples.
+            model: Model instance to evaluate (must implement infer_sequence_to_regression)
+            dataset: The dataset to evaluate on.
 
         Returns:
-            Metric names mapped to their final scalar scores.
+            dict: Scores with metric names as keys:
+                - 'regression_pearsonr_macro': Pearson r, averaged over labels
+                - 'regression_r2_macro': R^2 score, averaged over labels
         """
-        # Create a DataLoader from the evaluation dataset.
+        # Create dataloader from dataset
         data_loader = DataLoader(
             dataset, batch_size=self.batch_size, shuffle=False, num_workers=self.num_workers
         )
 
-        # Both metrics support sequence-level and binned regression arrays.
+        # Initialize metric classes (both handle sequence-level and binned predictions)
         metrics = [RegressionPearsonR(), RegressionR2()]
         output_spatiality = self._get_output_spatiality()
         expected_ndim = 3 if output_spatiality == OutputSpatiality.BINNED else 2
 
         for sequences, labels, conditional_input in tqdm(data_loader, desc="Evaluating"):
-            # Shape is [batch, labels] or [batch, bins, labels], according to
-            # the spatiality declared by the concrete task.
+            # Shape: [batch_size, num_labels] for sequence-level tasks,
+            # [batch_size, num_bins, num_labels] for binned tasks
             preds, = self._safe_model_call(
                 model,
                 "infer_sequence_to_regression",
@@ -104,8 +111,10 @@ class BaseGFMSupervisedRegressionTask(BaseGFMSupervisedTask):
                 else np.asarray(labels)
             )
 
+            # Verify model output is valid
             if preds is not None:
-                # Verify dimensionality, target agreement and label count.
+                # Verify that the predictions match the expected layout, the target
+                # shape, and the number of labels
                 preds = np.asarray(preds)
                 assert preds.ndim == expected_ndim, (
                     f"Expected {output_spatiality.value} regression predictions with "
@@ -120,14 +129,14 @@ class BaseGFMSupervisedRegressionTask(BaseGFMSupervisedTask):
                     f"Expected {num_labels} labels, but got {preds.shape[-1]}"
                 )
 
-            # Accumulate intermediate values for every regression metric.
+            # Calculate intermediate values for each metric
             for metric in metrics:
                 metric.calc(preds, labels_np)
 
-        # Use each metric's public name as its result key.
+        # Get final results dynamically using metric.name as the result key
         return {metric.name: metric.get_final_results() for metric in metrics}
 
     @abstractmethod
     def _get_output_spatiality(self) -> OutputSpatiality:
-        """Return whether labels are sequence-level or spatially binned."""
+        """Subclasses must implement this: return the output layout of the task"""
         pass
