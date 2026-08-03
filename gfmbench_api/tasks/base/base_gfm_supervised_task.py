@@ -1,0 +1,40 @@
+# SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
+# SPDX-License-Identifier: Apache-2.0
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+# http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+from abc import abstractmethod
+from typing import Optional
+
+from torch.utils.data import Dataset
+
+from gfmbench_api.tasks.base.base_gfm_task import BaseGFMTask
+
+
+class BaseGFMSupervisedTask(BaseGFMTask):
+    """Common base for supervised classification and regression tasks."""
+
+    def get_finetune_dataset(self) -> Optional[Dataset]:
+        """Return the training dataset for fine-tuning."""
+        return self.train_dataset
+
+    def _validate_num_labels(self) -> int:
+        num_labels = self._get_num_labels()
+        if num_labels < 1:
+            raise ValueError(f"num_labels must be positive, got {num_labels}")
+        return num_labels
+
+    @abstractmethod
+    def _get_num_labels(self) -> int:
+        """Return the number of labels predicted per sequence or spatial bin."""
+        pass

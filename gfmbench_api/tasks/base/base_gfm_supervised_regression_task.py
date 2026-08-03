@@ -19,11 +19,11 @@ from enum import Enum
 from typing import Any, Dict, Optional
 
 import numpy as np
-from torch.utils.data import DataLoader, Dataset
+from torch.utils.data import DataLoader
 from tqdm import tqdm
 
 from gfmbench_api.metrics import RegressionPearsonR, RegressionR2
-from gfmbench_api.tasks.base.base_gfm_task import BaseGFMTask
+from gfmbench_api.tasks.base.base_gfm_supervised_task import BaseGFMSupervisedTask
 
 
 class OutputSpatiality(str, Enum):
@@ -31,37 +31,32 @@ class OutputSpatiality(str, Enum):
     BINNED = "binned"
 
 
-class BaseGFMSupervisedRegressionTask(BaseGFMTask):
+class BaseGFMSupervisedRegressionTask(BaseGFMSupervisedTask):
     """Base class for sequence-level and spatially binned regression tasks.
 
-    ``output_spatiality`` determines the target and prediction layout:
+    ``_get_output_spatiality`` determines the target and prediction layout:
 
     * ``"sequence"``: ``[batch_size, num_outputs]``
     * ``"binned"``: ``[batch_size, num_bins, num_outputs]``
 
-    Subclasses set ``output_spatiality`` and implement ``_get_num_outputs`` in
-    addition to the abstract methods inherited from :class:`BaseGFMTask`.
+    Subclasses implement ``_get_output_spatiality`` and the inherited
+    ``_get_num_labels`` method.
     """
-
-    output_spatiality: OutputSpatiality
-
-    def get_finetune_dataset(self) -> Optional[Dataset]:
-        """Return the training dataset for fine-tuning."""
-        return self.train_dataset
 
     def get_task_attributes(self) -> Dict[str, Any]:
         """Return regression objective and output-layout attributes."""
-        if not isinstance(self.output_spatiality, OutputSpatiality):
+        output_spatiality = self._get_output_spatiality()
+        if not isinstance(output_spatiality, OutputSpatiality):
             raise TypeError(
-                "output_spatiality must be an OutputSpatiality member, "
-                f"got {self.output_spatiality!r}"
+                "_get_output_spatiality() must return an OutputSpatiality member, "
+                f"got {output_spatiality!r}"
             )
         return {
             "has_finetuning_data": True,
             "has_validation_data": self.validation_dataset is not None,
-            "num_outputs": self._get_num_outputs(),
+            "num_labels": self._validate_num_labels(),
             "task_type": "regression",
-            "output_spatiality": self.output_spatiality.value,
+            "output_spatiality": output_spatiality.value,
             "conditional_input_metadata": self.get_conditional_input_meta_data_frame(),
         }
 
@@ -71,9 +66,8 @@ class BaseGFMSupervisedRegressionTask(BaseGFMTask):
             dataset, batch_size=self.batch_size, shuffle=False, num_workers=self.num_workers
         )
         metrics = [RegressionPearsonR(), RegressionR2()]
-        expected_ndim = (
-            3 if self.output_spatiality == OutputSpatiality.BINNED else 2
-        )
+        output_spatiality = self._get_output_spatiality()
+        expected_ndim = 3 if output_spatiality == OutputSpatiality.BINNED else 2
 
         for sequences, labels, conditional_input in tqdm(data_loader, desc="Evaluating"):
             preds, = self._safe_model_call(
@@ -92,16 +86,16 @@ class BaseGFMSupervisedRegressionTask(BaseGFMTask):
             if preds is not None:
                 preds = np.asarray(preds)
                 assert preds.ndim == expected_ndim, (
-                    f"Expected {self.output_spatiality.value} regression predictions with "
+                    f"Expected {output_spatiality.value} regression predictions with "
                     f"{expected_ndim} dimensions, but got shape {preds.shape}"
                 )
                 assert preds.shape == labels_np.shape, (
                     f"Prediction shape {preds.shape} does not match target shape "
                     f"{labels_np.shape}"
                 )
-                num_outputs = self._get_num_outputs()
-                assert preds.shape[-1] == num_outputs, (
-                    f"Expected {num_outputs} outputs, but got {preds.shape[-1]}"
+                num_labels = self._get_num_labels()
+                assert preds.shape[-1] == num_labels, (
+                    f"Expected {num_labels} labels, but got {preds.shape[-1]}"
                 )
 
             for metric in metrics:
@@ -110,6 +104,6 @@ class BaseGFMSupervisedRegressionTask(BaseGFMTask):
         return {metric.name: metric.get_final_results() for metric in metrics}
 
     @abstractmethod
-    def _get_num_outputs(self) -> int:
-        """Return the number of regression outputs per sequence or bin."""
+    def _get_output_spatiality(self) -> OutputSpatiality:
+        """Return whether labels are sequence-level or spatially binned."""
         pass

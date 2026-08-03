@@ -23,15 +23,13 @@ from typing import Any, Dict, Optional, Tuple
 import pandas as pd
 from torch.utils.data import Dataset
 
-from gfmbench_api.tasks.base.base_gfm_supervised_classification_task import (
-    BaseGFMSupervisedClassificationTask,
-    ClassificationMode,
-    InputStructure,
+from gfmbench_api.tasks.base.base_gfm_supervised_single_seq_task import (
+    BaseGFMSupervisedSingleSeqTask,
 )
 from gfmbench_api.utils.lrb_local import build_chromatin_examples
 
 
-class LRBHistoneMarksTask(BaseGFMSupervisedClassificationTask):
+class LRBHistoneMarksTask(BaseGFMSupervisedSingleSeqTask):
     """LRB Chromatin Features - Histone Marks (multi-label classification).
 
     DeepSea-derived: each 200bp bin carries a binary vector over 20 histone-mark
@@ -43,8 +41,6 @@ class LRBHistoneMarksTask(BaseGFMSupervisedClassificationTask):
     # DeepSea histone subset used by LRB; the actual count is read from the data
     # in _create_datasets, this is only the fallback before materialization.
     DEFAULT_NUM_TRACKS = 20
-    classification_mode = ClassificationMode.MULTI_LABEL
-    input_structure = InputStructure.SEQUENCE
 
     def _get_default_max_seq_len(self) -> int:
         # Builder requires >=200bp.
@@ -52,6 +48,9 @@ class LRBHistoneMarksTask(BaseGFMSupervisedClassificationTask):
 
     def _get_num_labels(self) -> int:
         return getattr(self, "_num_labels", self.DEFAULT_NUM_TRACKS)
+
+    def _get_num_classes(self) -> int:
+        return 2
 
     def get_task_name(self) -> str:
         return "lrb_chromatin_features_histone_marks"

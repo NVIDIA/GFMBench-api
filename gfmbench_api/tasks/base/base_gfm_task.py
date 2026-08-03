@@ -155,9 +155,8 @@ class BaseGFMTask(ABC):
                 (only for classification tasks)
             "input_structure": [str] - "sequence" or "variant_reference_pair"
                 (only for classification tasks)
-            "num_labels": [int] - number of independent classification targets
+            "num_labels": [int] - number of labels for a supervised task
             "num_classes": [int] - number of classes per classification target
-            "num_outputs": [int] - number of continuous outputs (only for regression tasks)
             "output_spatiality": [str] - "sequence" or "binned" (only for regression tasks)
             "is_variant_effect_prediction": [bool] - whether a zero-shot task predicts
                 variant effects (only for zero-shot tasks)

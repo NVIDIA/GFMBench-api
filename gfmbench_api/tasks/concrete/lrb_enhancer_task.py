@@ -23,15 +23,13 @@ from typing import Any, Dict, Optional, Tuple
 import pandas as pd
 from torch.utils.data import Dataset
 
-from gfmbench_api.tasks.base.base_gfm_supervised_classification_task import (
-    BaseGFMSupervisedClassificationTask,
-    ClassificationMode,
-    InputStructure,
+from gfmbench_api.tasks.base.base_gfm_supervised_single_seq_task import (
+    BaseGFMSupervisedSingleSeqTask,
 )
 from gfmbench_api.utils.lrb_local import build_regulatory_examples
 
 
-class LRBEnhancerTask(BaseGFMSupervisedClassificationTask):
+class LRBEnhancerTask(BaseGFMSupervisedSingleSeqTask):
     """LRB Regulatory Elements - Enhancer (binary classification).
 
     A 200bp genomic bin is positive if it overlaps an annotated enhancer
@@ -40,12 +38,12 @@ class LRBEnhancerTask(BaseGFMSupervisedClassificationTask):
     is binary. Train = chr1-7,10-22; test = chr8,9.
     """
 
-    classification_mode = ClassificationMode.SINGLE_LABEL
-    input_structure = InputStructure.SEQUENCE
-
     def _get_default_max_seq_len(self) -> int:
         # Builder default context is 100kb.
         return 100000
+
+    def _get_num_labels(self) -> int:
+        return 1
 
     def _get_num_classes(self) -> int:
         return 2

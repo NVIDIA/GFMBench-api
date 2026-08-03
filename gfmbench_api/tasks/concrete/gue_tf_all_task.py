@@ -23,20 +23,15 @@ import pandas as pd
 import torch
 from torch.utils.data import Dataset
 
-from gfmbench_api.tasks.base.base_gfm_supervised_classification_task import (
-    BaseGFMSupervisedClassificationTask,
-    ClassificationMode,
-    InputStructure,
+from gfmbench_api.tasks.base.base_gfm_supervised_single_seq_task import (
+    BaseGFMSupervisedSingleSeqTask,
 )
 import numpy as np
 from gfmbench_api.utils.fileutils import download_hf_dataset_files
 from gfmbench_api.utils.preprocutils import truncate_sequence_from_ends
 
-class GueTranscriptionFactorTask(BaseGFMSupervisedClassificationTask):
+class GueTranscriptionFactorTask(BaseGFMSupervisedSingleSeqTask):
     """GUE Transcription Factor prediction task (binary classification)."""
-
-    classification_mode = ClassificationMode.SINGLE_LABEL
-    input_structure = InputStructure.SEQUENCE
 
     def __init__(self, root_data_dir_path: str,
                  task_config: Optional[Dict[str, Any]] = None):
@@ -49,6 +44,9 @@ class GueTranscriptionFactorTask(BaseGFMSupervisedClassificationTask):
     def _get_default_max_seq_len(self) -> int:
         """Return task's default maximum sequence length (100bp)."""
         return 100
+
+    def _get_num_labels(self) -> int:
+        return 1
     
     def _get_num_classes(self):
         """Return 2 (binary: TF binding site vs non-binding site)."""

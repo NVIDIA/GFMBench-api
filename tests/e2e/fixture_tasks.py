@@ -24,10 +24,8 @@ import numpy as np
 import pandas as pd
 from torch.utils.data import Dataset
 
-from gfmbench_api.tasks.base.base_gfm_supervised_classification_task import (
-    BaseGFMSupervisedClassificationTask,
-    ClassificationMode,
-    InputStructure,
+from gfmbench_api.tasks.base.base_gfm_supervised_variant_effect_task import (
+    BaseGFMSupervisedVariantEffectTask,
 )
 from gfmbench_api.tasks.base.base_gfm_zeroshot_general_indel_task import (
     BaseGFMZeroShotGeneralIndelTask,
@@ -66,11 +64,8 @@ def _build_variant_dataset(
     return rows
 
 
-class FixtureSupervisedVariantTask(BaseGFMSupervisedClassificationTask):
+class FixtureSupervisedVariantTask(BaseGFMSupervisedVariantEffectTask):
     """Supervised variant-effect task backed by shared ``fixture_variant/`` CSVs."""
-
-    classification_mode = ClassificationMode.SINGLE_LABEL
-    input_structure = InputStructure.VARIANT_REFERENCE_PAIR
 
     def get_task_name(self) -> str:
         return "fixture_supervised_variant"
@@ -80,6 +75,9 @@ class FixtureSupervisedVariantTask(BaseGFMSupervisedClassificationTask):
 
     def _get_num_classes(self) -> int:
         return 2
+
+    def _get_num_labels(self) -> int:
+        return 1
 
     def _create_datasets(self) -> Tuple[Optional[Dataset], Optional[Dataset], Dataset]:
         data_dir = _variant_data_dir(self.root_data_dir_path)

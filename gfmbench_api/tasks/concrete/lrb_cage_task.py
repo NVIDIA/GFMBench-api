@@ -46,13 +46,14 @@ class LRBCagePredictionTask(BaseGFMSupervisedRegressionTask):
     BIN_SIZE_BP = 128
     BUILDER_MAX_LENGTH = 114688  # 896 bins x 128bp (full Basenji/Enformer window)
     DEFAULT_NUM_TRACKS = 50
-    output_spatiality = OutputSpatiality.BINNED
-
     def _get_default_max_seq_len(self) -> int:
         return self.BUILDER_MAX_LENGTH
 
-    def _get_num_outputs(self) -> int:
+    def _get_num_labels(self) -> int:
         return getattr(self, "_num_tracks", self.DEFAULT_NUM_TRACKS)
+
+    def _get_output_spatiality(self) -> OutputSpatiality:
+        return OutputSpatiality.BINNED
 
     def get_task_name(self) -> str:
         return "lrb_cage_prediction"

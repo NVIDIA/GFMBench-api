@@ -2,6 +2,18 @@
 
 GFMBench-API is an extensible benchmarking suite for assessing genomic foundation models (GFMs) across a diverse set of downstream tasks, including classification, variant effect prediction, and zero-shot evaluation.
 
+This repository accompanies the paper [**“GFMBench-API: A Standardized Interface for Benchmarking Genomic Foundation Models”**](https://doi.org/10.64898/2026.02.19.706811) (bioRxiv, 2026). If you use GFMBench-API in your research, please cite the paper:
+
+```bibtex
+@article{larey2026gfmbench,
+  title   = {GFMBench-API: A Standardized Interface for Benchmarking Genomic Foundation Models},
+  author  = {Larey, Ariel and Dahan, Elay and Bleiweiss, Amit and Kellerman, Raizy and Leib, Guy and Nayshool, Omri and Ofer, Dan and Zinger, Tal and Dominissini, Dan and Rechavi, Gideon and Bussola, Nicole and Lee, Simon and O'Connell, Shane and Hoang, Dung and Wirth, Marissa and Charney, Alexander W. and Shavit, Yoli and Daniel, Nati},
+  journal = {bioRxiv},
+  year    = {2026},
+  doi     = {10.64898/2026.02.19.706811}
+}
+```
+
 ## Quick Start
 
 ### Installation
@@ -360,16 +372,14 @@ To add a new concrete task, inherit from the appropriate base class based on you
 
 Choose the appropriate base class based on your task:
 
-- **Supervised Classification**: Inherit from `BaseGFMSupervisedClassificationTask`
-  - Set `classification_mode` to `ClassificationMode.SINGLE_LABEL` or
-    `ClassificationMode.MULTI_LABEL`
-  - Set `input_structure` to `InputStructure.SEQUENCE` or
-    `InputStructure.VARIANT_REFERENCE_PAIR`
+- **Single-sequence classification**: Inherit from `BaseGFMSupervisedSingleSeqTask`
+- **Variant-effect classification**: Inherit from `BaseGFMSupervisedVariantEffectTask`
+- Classification mode is derived from `_get_num_labels()`: one label is
+  single-label classification; multiple labels are independent binary targets.
 
 - **Supervised Regression**: Inherit from `BaseGFMSupervisedRegressionTask`
-  - Set `output_spatiality = OutputSpatiality.SEQUENCE` for
-    `[batch, num_outputs]` targets or `OutputSpatiality.BINNED` for
-    `[batch, num_bins, num_outputs]` targets
+  - Implement `_get_output_spatiality()` to return
+    `OutputSpatiality.SEQUENCE` or `OutputSpatiality.BINNED`
   
 - **Zero-Shot SNV Variant Effect**: Inherit from `BaseGFMZeroShotSNVTask`
   - For zero-shot evaluation of single-nucleotide variants (SNVs) with equal-length reference and variant sequences
@@ -393,13 +403,13 @@ All concrete tasks must implement:
 
 Additional methods for supervised classification tasks:
 
-5. **`_get_num_classes() -> int`**: For single-label tasks, return the number of classes
-6. **`_get_num_labels() -> int`**: For multi-label tasks, return the number of
-   independent binary targets
+5. **`_get_num_labels() -> int`**: Return the number of predicted labels
+6. **`_get_num_classes() -> int`**: Return the number of classes per label
 
 Additional methods for supervised regression tasks:
 
-5. **`_get_num_outputs() -> int`**: Return the number of continuous outputs per sequence or bin
+5. **`_get_num_labels() -> int`**: Return the number of continuous labels per sequence or bin
+6. **`_get_output_spatiality() -> OutputSpatiality`**: Return the regression output layout
 
 Additional methods for zero-shot tasks:
 
@@ -408,19 +418,14 @@ Additional methods for zero-shot tasks:
 
 ```python
 from gfmbench_api.tasks.base import (
-    BaseGFMSupervisedClassificationTask,
-    ClassificationMode,
-    InputStructure,
+    BaseGFMSupervisedSingleSeqTask,
 )
 import os
 import pandas as pd
 import torch
 import numpy as np
 
-class MyCustomTask(BaseGFMSupervisedClassificationTask):
-    classification_mode = ClassificationMode.SINGLE_LABEL
-    input_structure = InputStructure.SEQUENCE
-
+class MyCustomTask(BaseGFMSupervisedSingleSeqTask):
     def get_task_name(self) -> str:
         return "my_custom_task"
     
@@ -429,6 +434,9 @@ class MyCustomTask(BaseGFMSupervisedClassificationTask):
     
     def _get_num_classes(self) -> int:
         return 2  # Binary classification
+
+    def _get_num_labels(self) -> int:
+        return 1
     
     def _create_datasets(self):
         data_dir = os.path.join(self.root_data_dir_path, self.get_task_name())
