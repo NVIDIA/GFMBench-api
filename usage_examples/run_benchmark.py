@@ -44,6 +44,7 @@ from torch.utils.data import DataLoader
 from gfmbench_api.utils import logutils
 
 from gfmbench_api.benchmark_report import BenchmarkReport
+from gfmbench_api.tasks.base import ClassificationMode, InputStructure
 from gfmbench_api.tasks.concrete.bend_vep_disease_task import BendVEPDisease
 from gfmbench_api.tasks.concrete.bend_vep_expression_task import BendVEPExpression
 from gfmbench_api.tasks.concrete.gue_promoter_all_task import GuePromoterAllTask
@@ -369,11 +370,11 @@ def main(argv=None):
                 raise NotImplementedError(
                     "The usage-example fine-tuner currently supports classification only."
                 )
-            classification_mode = task_attrs["classification_mode"]
-            input_structure = task_attrs["input_structure"]
+            classification_mode = ClassificationMode(task_attrs["classification_mode"])
+            input_structure = InputStructure(task_attrs["input_structure"])
             num_outputs = (
                 task_attrs["num_classes"]
-                if classification_mode == "single_label"
+                if classification_mode == ClassificationMode.SINGLE_LABEL
                 else task_attrs["num_labels"]
             )
             

@@ -25,6 +25,7 @@ from torch.utils.data import Dataset
 
 from gfmbench_api.tasks.base.base_gfm_supervised_regression_task import (
     BaseGFMSupervisedRegressionTask,
+    OutputSpatiality,
 )
 from gfmbench_api.utils.lrb_local import build_cage_examples
 
@@ -45,7 +46,7 @@ class LRBCagePredictionTask(BaseGFMSupervisedRegressionTask):
     BIN_SIZE_BP = 128
     BUILDER_MAX_LENGTH = 114688  # 896 bins x 128bp (full Basenji/Enformer window)
     DEFAULT_NUM_TRACKS = 50
-    output_spatiality = "binned"
+    output_spatiality = OutputSpatiality.BINNED
 
     def _get_default_max_seq_len(self) -> int:
         return self.BUILDER_MAX_LENGTH

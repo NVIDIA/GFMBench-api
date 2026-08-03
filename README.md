@@ -361,12 +361,15 @@ To add a new concrete task, inherit from the appropriate base class based on you
 Choose the appropriate base class based on your task:
 
 - **Supervised Classification**: Inherit from `BaseGFMSupervisedClassificationTask`
-  - Set `classification_mode` to `"single_label"` or `"multi_label"`
-  - Set `input_structure` to `"sequence"` or `"variant_reference_pair"`
+  - Set `classification_mode` to `ClassificationMode.SINGLE_LABEL` or
+    `ClassificationMode.MULTI_LABEL`
+  - Set `input_structure` to `InputStructure.SEQUENCE` or
+    `InputStructure.VARIANT_REFERENCE_PAIR`
 
 - **Supervised Regression**: Inherit from `BaseGFMSupervisedRegressionTask`
-  - Set `output_spatiality = "sequence"` for `[batch, num_outputs]` targets or
-    `"binned"` for `[batch, num_bins, num_outputs]` targets
+  - Set `output_spatiality = OutputSpatiality.SEQUENCE` for
+    `[batch, num_outputs]` targets or `OutputSpatiality.BINNED` for
+    `[batch, num_bins, num_outputs]` targets
   
 - **Zero-Shot SNV Variant Effect**: Inherit from `BaseGFMZeroShotSNVTask`
   - For zero-shot evaluation of single-nucleotide variants (SNVs) with equal-length reference and variant sequences
@@ -404,13 +407,20 @@ Additional methods for zero-shot tasks:
 ### Example: Supervised Single-Sequence Task
 
 ```python
-from gfmbench_api.tasks.base import BaseGFMSupervisedClassificationTask
+from gfmbench_api.tasks.base import (
+    BaseGFMSupervisedClassificationTask,
+    ClassificationMode,
+    InputStructure,
+)
 import os
 import pandas as pd
 import torch
 import numpy as np
 
 class MyCustomTask(BaseGFMSupervisedClassificationTask):
+    classification_mode = ClassificationMode.SINGLE_LABEL
+    input_structure = InputStructure.SEQUENCE
+
     def get_task_name(self) -> str:
         return "my_custom_task"
     

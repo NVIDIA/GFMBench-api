@@ -15,7 +15,8 @@
 
 # This module does not embed third-party data download URLs.
 from abc import abstractmethod
-from typing import Any, Dict, Literal, Optional
+from enum import Enum
+from typing import Any, Dict, Optional
 
 import numpy as np
 from torch.utils.data import DataLoader, Dataset
@@ -23,6 +24,11 @@ from tqdm import tqdm
 
 from gfmbench_api.metrics import RegressionPearsonR, RegressionR2
 from gfmbench_api.tasks.base.base_gfm_task import BaseGFMTask
+
+
+class OutputSpatiality(str, Enum):
+    SEQUENCE = "sequence"
+    BINNED = "binned"
 
 
 class BaseGFMSupervisedRegressionTask(BaseGFMTask):
@@ -37,7 +43,7 @@ class BaseGFMSupervisedRegressionTask(BaseGFMTask):
     addition to the abstract methods inherited from :class:`BaseGFMTask`.
     """
 
-    output_spatiality: Literal["sequence", "binned"] = "sequence"
+    output_spatiality: OutputSpatiality
 
     def get_finetune_dataset(self) -> Optional[Dataset]:
         """Return the training dataset for fine-tuning."""
@@ -45,16 +51,17 @@ class BaseGFMSupervisedRegressionTask(BaseGFMTask):
 
     def get_task_attributes(self) -> Dict[str, Any]:
         """Return regression objective and output-layout attributes."""
-        if self.output_spatiality not in ("sequence", "binned"):
-            raise ValueError(
-                f"Unsupported regression output_spatiality: {self.output_spatiality!r}"
+        if not isinstance(self.output_spatiality, OutputSpatiality):
+            raise TypeError(
+                "output_spatiality must be an OutputSpatiality member, "
+                f"got {self.output_spatiality!r}"
             )
         return {
             "has_finetuning_data": True,
             "has_validation_data": self.validation_dataset is not None,
             "num_outputs": self._get_num_outputs(),
             "task_type": "regression",
-            "output_spatiality": self.output_spatiality,
+            "output_spatiality": self.output_spatiality.value,
             "conditional_input_metadata": self.get_conditional_input_meta_data_frame(),
         }
 
@@ -64,7 +71,9 @@ class BaseGFMSupervisedRegressionTask(BaseGFMTask):
             dataset, batch_size=self.batch_size, shuffle=False, num_workers=self.num_workers
         )
         metrics = [RegressionPearsonR(), RegressionR2()]
-        expected_ndim = 3 if self.output_spatiality == "binned" else 2
+        expected_ndim = (
+            3 if self.output_spatiality == OutputSpatiality.BINNED else 2
+        )
 
         for sequences, labels, conditional_input in tqdm(data_loader, desc="Evaluating"):
             preds, = self._safe_model_call(
@@ -83,7 +92,7 @@ class BaseGFMSupervisedRegressionTask(BaseGFMTask):
             if preds is not None:
                 preds = np.asarray(preds)
                 assert preds.ndim == expected_ndim, (
-                    f"Expected {self.output_spatiality} regression predictions with "
+                    f"Expected {self.output_spatiality.value} regression predictions with "
                     f"{expected_ndim} dimensions, but got shape {preds.shape}"
                 )
                 assert preds.shape == labels_np.shape, (

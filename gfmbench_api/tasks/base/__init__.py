@@ -40,7 +40,10 @@ from gfmbench_api.tasks.base.base_gfm_supervised_classification_task import (
     ClassificationMode,
     InputStructure,
 )
-from gfmbench_api.tasks.base.base_gfm_supervised_regression_task import BaseGFMSupervisedRegressionTask
+from gfmbench_api.tasks.base.base_gfm_supervised_regression_task import (
+    BaseGFMSupervisedRegressionTask,
+    OutputSpatiality,
+)
 
 # Zero-shot task hierarchy
 from gfmbench_api.tasks.base.base_gfm_zero_shot_task import BaseGFMZeroShotTask
@@ -56,6 +59,7 @@ __all__ = [
     "ClassificationMode",
     "InputStructure",
     "BaseGFMSupervisedRegressionTask",
+    "OutputSpatiality",
     # Zero-shot task hierarchy
     "BaseGFMZeroShotTask",
     "BaseGFMZeroShotSNVTask",

@@ -31,6 +31,7 @@ from gfmbench_api.tasks.base import (
     BaseGFMZeroShotTask,
     ClassificationMode,
     InputStructure,
+    OutputSpatiality,
 )
 
 __all__ = [
@@ -40,6 +41,7 @@ __all__ = [
     "ClassificationMode",
     "InputStructure",
     "BaseGFMSupervisedRegressionTask",
+    "OutputSpatiality",
     "BaseGFMZeroShotTask",
     "BaseGFMZeroShotSNVTask",
     "BaseGFMZeroShotGeneralIndelTask",

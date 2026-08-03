@@ -31,8 +31,7 @@ class GFMWithProjection(BaseGFMModel):
     """
     
     def __init__(self, base_model: BaseGFMModel, projection_layer: Optional[nn.Module] = None,
-                 cache_size: Optional[float] = None,
-                 classification_mode: str = "single_label") -> None:
+                 cache_size: Optional[float] = None) -> None:
         """
         Initialize the wrapped model.
         
@@ -45,7 +44,6 @@ class GFMWithProjection(BaseGFMModel):
         self.projection_layer: Optional[nn.Module] = projection_layer
         self.device: str = base_model.device
         self.cache_size = cache_size
-        self.classification_mode = classification_mode
         self._ref_cache = SequenceInferenceCache(max_size_gb=cache_size)
 
     def clear_ref_cache(self) -> None:
