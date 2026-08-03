@@ -34,13 +34,20 @@ class OutputSpatiality(str, Enum):
 class BaseGFMSupervisedRegressionTask(BaseGFMSupervisedTask):
     """Base class for sequence-level and spatially binned regression tasks.
 
-    ``_get_output_spatiality`` determines the target and prediction layout:
+    Each example is ``(sequence, labels, conditional_input)``. The value
+    returned by ``_get_output_spatiality`` determines the label and prediction
+    layout:
 
-    * ``"sequence"``: ``[batch_size, num_outputs]``
-    * ``"binned"``: ``[batch_size, num_bins, num_outputs]``
+    * ``SEQUENCE``: ``[batch_size, num_labels]``
+    * ``BINNED``: ``[batch_size, num_bins, num_labels]``
+
+    Evaluation calls ``infer_sequence_to_regression`` and reports macro Pearson
+    r and macro R². For binned outputs, leading sample and bin dimensions are
+    pooled per label by the metrics.
 
     Subclasses implement ``_get_output_spatiality`` and the inherited
-    ``_get_num_labels`` method.
+    ``_get_num_labels`` method, together with dataset creation, task naming,
+    default sequence length and conditional-input metadata methods.
     """
 
     def get_task_attributes(self) -> Dict[str, Any]:
@@ -61,15 +68,29 @@ class BaseGFMSupervisedRegressionTask(BaseGFMSupervisedTask):
         }
 
     def _eval_dataset(self, model: Any, dataset: Any) -> Dict[str, Optional[float]]:
-        """Evaluate regression predictions with macro Pearson r and macro R^2."""
+        """Evaluate regression predictions with macro Pearson r and macro R².
+
+        Args:
+            model: Model implementing ``infer_sequence_to_regression``.
+            dataset: Dataset yielding sequence, label and conditional-input
+                tuples.
+
+        Returns:
+            Metric names mapped to their final scalar scores.
+        """
+        # Create a DataLoader from the evaluation dataset.
         data_loader = DataLoader(
             dataset, batch_size=self.batch_size, shuffle=False, num_workers=self.num_workers
         )
+
+        # Both metrics support sequence-level and binned regression arrays.
         metrics = [RegressionPearsonR(), RegressionR2()]
         output_spatiality = self._get_output_spatiality()
         expected_ndim = 3 if output_spatiality == OutputSpatiality.BINNED else 2
 
         for sequences, labels, conditional_input in tqdm(data_loader, desc="Evaluating"):
+            # Shape is [batch, labels] or [batch, bins, labels], according to
+            # the spatiality declared by the concrete task.
             preds, = self._safe_model_call(
                 model,
                 "infer_sequence_to_regression",
@@ -84,6 +105,7 @@ class BaseGFMSupervisedRegressionTask(BaseGFMSupervisedTask):
             )
 
             if preds is not None:
+                # Verify dimensionality, target agreement and label count.
                 preds = np.asarray(preds)
                 assert preds.ndim == expected_ndim, (
                     f"Expected {output_spatiality.value} regression predictions with "
@@ -98,9 +120,11 @@ class BaseGFMSupervisedRegressionTask(BaseGFMSupervisedTask):
                     f"Expected {num_labels} labels, but got {preds.shape[-1]}"
                 )
 
+            # Accumulate intermediate values for every regression metric.
             for metric in metrics:
                 metric.calc(preds, labels_np)
 
+        # Use each metric's public name as its result key.
         return {metric.name: metric.get_final_results() for metric in metrics}
 
     @abstractmethod

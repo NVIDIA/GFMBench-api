@@ -25,20 +25,50 @@ from gfmbench_api.tasks.base.base_gfm_supervised_classification_task import (
 
 
 class BaseGFMSupervisedSingleSeqTask(BaseGFMSupervisedClassificationTask):
-    """Base class for supervised classification from one sequence."""
+    """Base class for supervised classification from one sequence.
+
+    Dataset format:
+        ``(sequence, label, conditional_input)`` tuples.
+
+    Model inference:
+        - Single-label: ``infer_sequence_to_labels_probs``
+        - Multi-label: ``infer_sequence_to_multilabel_probs``
+
+    Subclasses must implement ``_get_num_labels``, ``_get_num_classes``,
+    ``_create_datasets``, ``get_task_name``, ``_get_default_max_seq_len`` and
+    ``get_conditional_input_meta_data_frame``.
+    """
 
     def _get_input_structure(self) -> InputStructure:
+        """Return the single-sequence input layout."""
         return InputStructure.SEQUENCE
 
     def _batch_to_probs(
         self, batch: Any, model: Any
     ) -> Tuple[Optional[np.ndarray], np.ndarray]:
+        """Extract probabilities and labels from a single-sequence batch.
+
+        Args:
+            batch: ``(sequences, labels, conditional_input)`` from a DataLoader.
+            model: Model implementing the sequence inference method appropriate
+                for the derived classification mode.
+
+        Returns:
+            A ``(probs, labels)`` tuple. ``probs`` is either ``None`` or an
+            array shaped ``[batch_size, output_dim]``; ``labels`` is returned
+            unchanged for conversion by the shared evaluation loop.
+        """
         sequences, labels, conditional_input = batch
+
+        # Multi-label tasks produce one independent probability per label;
+        # single-label tasks produce a normalized distribution over classes.
         method = (
             "infer_sequence_to_multilabel_probs"
             if self._get_classification_mode() == ClassificationMode.MULTI_LABEL
             else "infer_sequence_to_labels_probs"
         )
+
+        # Model inference methods return probabilities as NumPy arrays.
         probs, = self._safe_model_call(
             model, method, sequences, conditional_input, num_outputs=1
         )

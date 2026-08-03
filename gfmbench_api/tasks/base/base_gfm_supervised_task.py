@@ -22,13 +22,21 @@ from gfmbench_api.tasks.base.base_gfm_task import BaseGFMTask
 
 
 class BaseGFMSupervisedTask(BaseGFMTask):
-    """Common base for supervised classification and regression tasks."""
+    """Common base for supervised classification and regression tasks.
+
+    Supervised tasks expose their training split through
+    ``get_finetune_dataset`` and declare their output width with
+    ``_get_num_labels``. For classification this is the number of independent
+    targets; for regression it is the number of continuous outputs per sequence
+    or spatial bin.
+    """
 
     def get_finetune_dataset(self) -> Optional[Dataset]:
         """Return the training dataset for fine-tuning."""
         return self.train_dataset
 
     def _validate_num_labels(self) -> int:
+        """Return the declared label count after validating that it is positive."""
         num_labels = self._get_num_labels()
         if num_labels < 1:
             raise ValueError(f"num_labels must be positive, got {num_labels}")
