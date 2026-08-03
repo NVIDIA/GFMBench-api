@@ -26,6 +26,8 @@ from torch.utils.data import Dataset
 
 from gfmbench_api.tasks.base.base_gfm_supervised_classification_task import (
     BaseGFMSupervisedClassificationTask,
+    ClassificationMode,
+    InputStructure,
 )
 from gfmbench_api.tasks.base.base_gfm_zeroshot_general_indel_task import (
     BaseGFMZeroShotGeneralIndelTask,
@@ -67,8 +69,8 @@ def _build_variant_dataset(
 class FixtureSupervisedVariantTask(BaseGFMSupervisedClassificationTask):
     """Supervised variant-effect task backed by shared ``fixture_variant/`` CSVs."""
 
-    classification_mode = "single_label"
-    input_structure = "variant_reference_pair"
+    classification_mode = ClassificationMode.SINGLE_LABEL
+    input_structure = InputStructure.VARIANT_REFERENCE_PAIR
 
     def get_task_name(self) -> str:
         return "fixture_supervised_variant"

@@ -1,17 +1,23 @@
 import numpy as np
 import torch
 
-from gfmbench_api import BaseGFMSupervisedClassificationTask as RootClassificationTask
+from gfmbench_api import (
+    BaseGFMSupervisedClassificationTask as RootClassificationTask,
+    ClassificationMode,
+    InputStructure,
+)
 from gfmbench_api.tasks import (
     BaseGFMSupervisedClassificationTask as TasksClassificationTask,
+    ClassificationMode as TasksClassificationMode,
+    InputStructure as TasksInputStructure,
 )
 from gfmbench_api.tasks.base import BaseGFMSupervisedClassificationTask
 
 
 class _ClassificationTask(BaseGFMSupervisedClassificationTask):
     def __init__(self, classification_mode, input_structure):
-        self.classification_mode = classification_mode
-        self.input_structure = input_structure
+        self.classification_mode = ClassificationMode(classification_mode)
+        self.input_structure = InputStructure(input_structure)
         super().__init__(".")
 
     def _get_default_max_seq_len(self):
@@ -106,3 +112,5 @@ def test_classification_evaluation_supports_current_modes_and_inputs():
 def test_classification_base_is_exported_from_public_packages():
     assert RootClassificationTask is BaseGFMSupervisedClassificationTask
     assert TasksClassificationTask is BaseGFMSupervisedClassificationTask
+    assert TasksClassificationMode is ClassificationMode
+    assert TasksInputStructure is InputStructure

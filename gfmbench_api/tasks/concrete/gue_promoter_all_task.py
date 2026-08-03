@@ -25,6 +25,8 @@ from torch.utils.data import Dataset
 
 from gfmbench_api.tasks.base.base_gfm_supervised_classification_task import (
     BaseGFMSupervisedClassificationTask,
+    ClassificationMode,
+    InputStructure,
 )
 import numpy as np
 from gfmbench_api.utils.fileutils import (
@@ -37,8 +39,8 @@ from gfmbench_api.utils.preprocutils import truncate_sequence_from_ends
 class GuePromoterAllTask(BaseGFMSupervisedClassificationTask):
     """GUE promoter prediction task (binary classification)."""
 
-    classification_mode = "single_label"
-    input_structure = "sequence"
+    classification_mode = ClassificationMode.SINGLE_LABEL
+    input_structure = InputStructure.SEQUENCE
     
     def __init__(self, root_data_dir_path: str,
                  task_config: Optional[Dict[str, Any]] = None):

@@ -25,6 +25,8 @@ from torch.utils.data import Dataset
 
 from gfmbench_api.tasks.base.base_gfm_supervised_classification_task import (
     BaseGFMSupervisedClassificationTask,
+    ClassificationMode,
+    InputStructure,
 )
 from gfmbench_api.utils.lrb_local import build_regulatory_examples
 
@@ -38,8 +40,8 @@ class LRBEnhancerTask(BaseGFMSupervisedClassificationTask):
     is binary. Train = chr1-7,10-22; test = chr8,9.
     """
 
-    classification_mode = "single_label"
-    input_structure = "sequence"
+    classification_mode = ClassificationMode.SINGLE_LABEL
+    input_structure = InputStructure.SEQUENCE
 
     def _get_default_max_seq_len(self) -> int:
         # Builder default context is 100kb.

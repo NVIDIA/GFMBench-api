@@ -25,6 +25,8 @@ from datasets import DatasetDict
 
 from gfmbench_api.tasks.base.base_gfm_supervised_classification_task import (
     BaseGFMSupervisedClassificationTask,
+    ClassificationMode,
+    InputStructure,
 )
 import numpy as np
 from gfmbench_api.utils.fileutils import download_hf_dataset_files
@@ -82,8 +84,8 @@ class VariantBenchmarksCommonVsRareTask(BaseGFMSupervisedClassificationTask):
 
     In order to support the general "ref_seq", "alt_seq", "label" format, this task optionally extracts forward-strand, SNP-centered var and ref sequences
     """
-    classification_mode = "single_label"
-    input_structure = "variant_reference_pair"
+    classification_mode = ClassificationMode.SINGLE_LABEL
+    input_structure = InputStructure.VARIANT_REFERENCE_PAIR
 
     def __init__(self, root_data_dir_path: str,
                  task_config: Optional[Dict[str, Any]] = None):

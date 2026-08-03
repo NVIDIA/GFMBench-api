@@ -29,12 +29,16 @@ from gfmbench_api.tasks.base import (
     BaseGFMZeroShotGeneralIndelTask,
     BaseGFMZeroShotSNVTask,
     BaseGFMZeroShotTask,
+    ClassificationMode,
+    InputStructure,
 )
 
 __all__ = [
     "BaseGFMModel",
     "BaseGFMTask",
     "BaseGFMSupervisedClassificationTask",
+    "ClassificationMode",
+    "InputStructure",
     "BaseGFMSupervisedRegressionTask",
     "BaseGFMZeroShotTask",
     "BaseGFMZeroShotSNVTask",

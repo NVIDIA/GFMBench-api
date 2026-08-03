@@ -25,6 +25,8 @@ from torch.utils.data import Dataset
 
 from gfmbench_api.tasks.base.base_gfm_supervised_classification_task import (
     BaseGFMSupervisedClassificationTask,
+    ClassificationMode,
+    InputStructure,
 )
 from gfmbench_api.utils.lrb_local import build_chromatin_examples
 
@@ -41,8 +43,8 @@ class LRBHistoneMarksTask(BaseGFMSupervisedClassificationTask):
     # DeepSea histone subset used by LRB; the actual count is read from the data
     # in _create_datasets, this is only the fallback before materialization.
     DEFAULT_NUM_TRACKS = 20
-    classification_mode = "multi_label"
-    input_structure = "sequence"
+    classification_mode = ClassificationMode.MULTI_LABEL
+    input_structure = InputStructure.SEQUENCE
 
     def _get_default_max_seq_len(self) -> int:
         # Builder requires >=200bp.

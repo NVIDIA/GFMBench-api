@@ -14,7 +14,8 @@
 # limitations under the License.
 
 # This module does not embed third-party data download URLs.
-from typing import Any, Dict, Literal, Optional, Tuple
+from enum import Enum
+from typing import Any, Dict, Optional, Tuple
 
 import numpy as np
 from torch.utils.data import DataLoader, Dataset
@@ -31,6 +32,16 @@ from gfmbench_api.metrics import (
 from gfmbench_api.tasks.base.base_gfm_task import BaseGFMTask
 
 
+class ClassificationMode(str, Enum):
+    SINGLE_LABEL = "single_label"
+    MULTI_LABEL = "multi_label"
+
+
+class InputStructure(str, Enum):
+    SEQUENCE = "sequence"
+    VARIANT_REFERENCE_PAIR = "variant_reference_pair"
+
+
 class BaseGFMSupervisedClassificationTask(BaseGFMTask):
     """Base class for supervised single-label and multi-label classification.
 
@@ -39,8 +50,8 @@ class BaseGFMSupervisedClassificationTask(BaseGFMTask):
     inference method.
     """
 
-    classification_mode: Literal["single_label", "multi_label"]
-    input_structure: Literal["sequence", "variant_reference_pair"]
+    classification_mode: ClassificationMode
+    input_structure: InputStructure
 
     def get_finetune_dataset(self) -> Optional[Dataset]:
         """Return the training dataset for fine-tuning."""
@@ -48,31 +59,33 @@ class BaseGFMSupervisedClassificationTask(BaseGFMTask):
 
     def _get_num_labels(self) -> int:
         """Return independent target count; single-label tasks have one target."""
-        if self.classification_mode == "single_label":
+        if self.classification_mode == ClassificationMode.SINGLE_LABEL:
             return 1
         raise NotImplementedError("Multi-label tasks must implement _get_num_labels()")
 
     def _get_num_classes(self) -> int:
         """Return classes per target; conventional multi-label targets are binary."""
-        if self.classification_mode == "multi_label":
+        if self.classification_mode == ClassificationMode.MULTI_LABEL:
             return 2
         raise NotImplementedError("Single-label tasks must implement _get_num_classes()")
 
     def _get_output_dim(self) -> int:
         """Return projection-head width for the configured classification mode."""
-        if self.classification_mode == "single_label":
+        if self.classification_mode == ClassificationMode.SINGLE_LABEL:
             return self._get_num_classes()
         return self._get_num_labels()
 
     def _validate_classification_attributes(self) -> None:
-        classification_mode = getattr(self, "classification_mode", None)
-        input_structure = getattr(self, "input_structure", None)
-        if classification_mode not in ("single_label", "multi_label"):
-            raise ValueError(
-                f"Unsupported classification_mode: {classification_mode!r}"
+        if not isinstance(self.classification_mode, ClassificationMode):
+            raise TypeError(
+                "classification_mode must be a ClassificationMode member, "
+                f"got {self.classification_mode!r}"
             )
-        if input_structure not in ("sequence", "variant_reference_pair"):
-            raise ValueError(f"Unsupported input_structure: {input_structure!r}")
+        if not isinstance(self.input_structure, InputStructure):
+            raise TypeError(
+                "input_structure must be an InputStructure member, "
+                f"got {self.input_structure!r}"
+            )
 
         num_labels = self._get_num_labels()
         num_classes = self._get_num_classes()
@@ -80,9 +93,9 @@ class BaseGFMSupervisedClassificationTask(BaseGFMTask):
             raise ValueError(f"num_labels must be positive, got {num_labels}")
         if num_classes < 2:
             raise ValueError(f"num_classes must be at least 2, got {num_classes}")
-        if self.classification_mode == "single_label" and num_labels != 1:
+        if self.classification_mode == ClassificationMode.SINGLE_LABEL and num_labels != 1:
             raise ValueError("single_label classification must have num_labels == 1")
-        if self.classification_mode == "multi_label" and num_classes != 2:
+        if self.classification_mode == ClassificationMode.MULTI_LABEL and num_classes != 2:
             raise ValueError("multi_label classification requires binary labels")
 
     def get_task_attributes(self) -> Dict[str, Any]:
@@ -92,8 +105,8 @@ class BaseGFMSupervisedClassificationTask(BaseGFMTask):
             "has_finetuning_data": True,
             "has_validation_data": self.validation_dataset is not None,
             "task_type": "classification",
-            "classification_mode": self.classification_mode,
-            "input_structure": self.input_structure,
+            "classification_mode": self.classification_mode.value,
+            "input_structure": self.input_structure.value,
             "num_labels": self._get_num_labels(),
             "num_classes": self._get_num_classes(),
             "conditional_input_metadata": self.get_conditional_input_meta_data_frame(),
@@ -103,9 +116,9 @@ class BaseGFMSupervisedClassificationTask(BaseGFMTask):
         self, batch: Any, model: Any
     ) -> Tuple[Optional[np.ndarray], np.ndarray]:
         """Run the model method selected by input structure and label mode."""
-        is_multilabel = self.classification_mode == "multi_label"
+        is_multilabel = self.classification_mode == ClassificationMode.MULTI_LABEL
 
-        if self.input_structure == "sequence":
+        if self.input_structure == InputStructure.SEQUENCE:
             sequences, labels, conditional_input = batch
             method = (
                 "infer_sequence_to_multilabel_probs"
@@ -139,7 +152,7 @@ class BaseGFMSupervisedClassificationTask(BaseGFMTask):
         data_loader = DataLoader(
             dataset, batch_size=self.batch_size, shuffle=False, num_workers=self.num_workers
         )
-        if self.classification_mode == "multi_label":
+        if self.classification_mode == ClassificationMode.MULTI_LABEL:
             metrics = [
                 MultiLabelClassificationAUROC(),
                 MultiLabelClassificationAUPRC(),
@@ -167,7 +180,7 @@ class BaseGFMSupervisedClassificationTask(BaseGFMTask):
                     f"Expected probabilities with shape [batch_size, {output_dim}], "
                     f"but got {probs.shape}"
                 )
-                if self.classification_mode == "single_label":
+                if self.classification_mode == ClassificationMode.SINGLE_LABEL:
                     prob_sums = probs.sum(axis=1)
                     assert np.allclose(
                         prob_sums, np.ones_like(prob_sums), atol=1e-5

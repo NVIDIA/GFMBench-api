@@ -31,6 +31,8 @@ from typing import Any, Tuple, Optional, Dict, List
 # Framework Imports
 from gfmbench_api.tasks.base.base_gfm_supervised_classification_task import (
     BaseGFMSupervisedClassificationTask,
+    ClassificationMode,
+    InputStructure,
 )
 from gfmbench_api.utils.fileutils import ensure_hf_hub_file, ensure_reference_genome
 from gfmbench_api.utils.preprocutils import standardize_sequence, pad_sequence_centered_variant
@@ -86,8 +88,8 @@ class LRBCausalEqtlTask(BaseGFMSupervisedClassificationTask):
     Includes Data Loading and Twin-Tower Architecture Integration.
     """
 
-    classification_mode = "single_label"
-    input_structure = "variant_reference_pair"
+    classification_mode = ClassificationMode.SINGLE_LABEL
+    input_structure = InputStructure.VARIANT_REFERENCE_PAIR
 
     def get_task_name(self) -> str:
         return "lrb_variant_effect_causal_eqtl"
