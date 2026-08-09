@@ -20,7 +20,6 @@ import torch
 import torch.nn as nn
 from tqdm import tqdm
 
-from gfmbench_api import ClassificationMode, InputStructure
 from gfmbench_api.utils.caching_utils import SequenceInferenceCache
 from usage_examples.trainers.model_wrapper import GFMWithProjection
 
@@ -42,8 +41,8 @@ class GFMFinetuner:
         optimizer_name="AdamW",
         weight_decay=0.01,
         only_proj_layer=True,
-        classification_mode: ClassificationMode = ClassificationMode.SINGLE_LABEL,
-        input_structure: InputStructure = InputStructure.SEQUENCE,
+        classification_mode: str = "single_label",
+        is_variant_effect_prediction=False,
         cache_size: Optional[float] = None,
         device='cpu'
     ):
@@ -61,7 +60,7 @@ class GFMFinetuner:
             weight_decay: weight decay for regularization
             only_proj_layer: if True, only train projection layer; if False, train full model
             classification_mode: classification target semantics
-            input_structure: sequence input layout
+            is_variant_effect_prediction: if True, task uses variant/ref sequence pairs
             cache_size: cache RAM limit in GB; None for unlimited, 0 disables caching
             device: torch device
         """
@@ -75,7 +74,7 @@ class GFMFinetuner:
         self.weight_decay = weight_decay
         self.only_proj_layer = only_proj_layer
         self.classification_mode = classification_mode
-        self.input_structure = input_structure
+        self.is_variant_effect_prediction = is_variant_effect_prediction
         self.cache_size = cache_size
         self.device = device
         
@@ -83,7 +82,7 @@ class GFMFinetuner:
         # For variant effect tasks, input is concatenated embeddings (hidden_dim * 2)
         proj_input_dim = (
             self.hidden_dim * 2
-            if input_structure == InputStructure.VARIANT_REFERENCE_PAIR
+            if is_variant_effect_prediction
             else self.hidden_dim
         )
         self.projection = nn.Linear(proj_input_dim, self.num_outputs).to(device)
@@ -128,7 +127,7 @@ class GFMFinetuner:
         
         criterion = (
             torch.nn.BCEWithLogitsLoss()
-            if self.classification_mode == ClassificationMode.MULTI_LABEL
+            if self.classification_mode == "multi_label"
             else torch.nn.CrossEntropyLoss()
         )
         
@@ -148,7 +147,7 @@ class GFMFinetuner:
             
             progress_bar = tqdm(self.train_loader, desc=f"Fine-tuning epoch {epoch+1}/{self.num_epochs}")
             for batch in progress_bar:
-                if self.input_structure == InputStructure.VARIANT_REFERENCE_PAIR:
+                if self.is_variant_effect_prediction:
                     # Variant effect task: (variant_seqs, ref_seqs, labels, conditional_input)
                     variant_sequences, ref_sequences, labels, conditional_input = batch
                     labels = labels.to(self.device)
@@ -195,7 +194,7 @@ class GFMFinetuner:
                     else:
                         sequence_repr = self.model._sequence_to_representative(sequences)
 
-                if self.classification_mode == ClassificationMode.MULTI_LABEL:
+                if self.classification_mode == "multi_label":
                     labels = labels.float()
                 
                 logits = self.projection(sequence_repr)

@@ -15,7 +15,6 @@
 
 # This module does not embed third-party data download URLs.
 from abc import abstractmethod
-from enum import Enum
 from typing import Any, Dict, Optional, Tuple
 
 import numpy as np
@@ -27,20 +26,8 @@ from gfmbench_api.metrics import (
     ClassificationAUPRC,
     ClassificationAUROC,
     ClassificationMCC,
-    MultiLabelClassificationAUPRC,
-    MultiLabelClassificationAUROC,
 )
 from gfmbench_api.tasks.base.base_gfm_supervised_task import BaseGFMSupervisedTask
-
-
-class ClassificationMode(str, Enum):
-    SINGLE_LABEL = "single_label"
-    MULTI_LABEL = "multi_label"
-
-
-class InputStructure(str, Enum):
-    SEQUENCE = "sequence"
-    VARIANT_REFERENCE_PAIR = "variant_reference_pair"
 
 
 class BaseGFMSupervisedClassificationTask(BaseGFMSupervisedTask):
@@ -53,7 +40,7 @@ class BaseGFMSupervisedClassificationTask(BaseGFMSupervisedTask):
     with several labels is multi-label (one independent binary target per label).
 
     Subclasses must implement:
-        - _get_input_structure(): Return the input structure of the task
+        - _is_variant_effect_prediction(): Return whether examples are variant/reference pairs
         - _batch_to_probs(batch, model): Extract probs and labels from a batch
         - _get_num_labels(): Return number of independent classification targets
         - _get_num_classes(): Return number of classes per target
@@ -67,12 +54,6 @@ class BaseGFMSupervisedClassificationTask(BaseGFMSupervisedTask):
         """Subclasses must implement this: return number of classes per target"""
         pass
 
-    def _get_classification_mode(self) -> ClassificationMode:
-        """Return single-label for tasks with one label, multi-label otherwise."""
-        if self._get_num_labels() == 1:
-            return ClassificationMode.SINGLE_LABEL
-        return ClassificationMode.MULTI_LABEL
-
     def _get_output_dim(self) -> int:
         """
         Return the expected width of the model output.
@@ -80,19 +61,12 @@ class BaseGFMSupervisedClassificationTask(BaseGFMSupervisedTask):
         Single-label tasks output one probability per class, multi-label tasks
         output one probability per label.
         """
-        if self._get_classification_mode() == ClassificationMode.SINGLE_LABEL:
+        if self._get_num_labels() == 1:
             return self._get_num_classes()
         return self._get_num_labels()
 
     def _validate_classification_methods(self) -> None:
         """Verify that the values declared by the subclass are consistent."""
-        input_structure = self._get_input_structure()
-        if not isinstance(input_structure, InputStructure):
-            raise TypeError(
-                "_get_input_structure() must return an InputStructure member, "
-                f"got {input_structure!r}"
-            )
-
         num_labels = self._validate_num_labels()
         num_classes = self._get_num_classes()
         if num_classes < 2:
@@ -103,13 +77,14 @@ class BaseGFMSupervisedClassificationTask(BaseGFMSupervisedTask):
     def get_task_attributes(self) -> Dict[str, Any]:
         """Return task attributes for classification tasks."""
         self._validate_classification_methods()
-        classification_mode = self._get_classification_mode()
         return {
             "has_finetuning_data": True,
             "has_validation_data": self.validation_dataset is not None,
             "task_type": "classification",
-            "classification_mode": classification_mode.value,
-            "input_structure": self._get_input_structure().value,
+            "classification_mode": (
+                "single_label" if self._get_num_labels() == 1 else "multi_label"
+            ),
+            "is_variant_effect_prediction": self._is_variant_effect_prediction(),
             "num_labels": self._get_num_labels(),
             "num_classes": self._get_num_classes(),
             "conditional_input_metadata": self.get_conditional_input_meta_data_frame(),
@@ -135,7 +110,7 @@ class BaseGFMSupervisedClassificationTask(BaseGFMSupervisedTask):
                 - 'multilabel_auprc_macro': Area Under Precision-Recall Curve, averaged over labels
         """
         self._validate_classification_methods()
-        classification_mode = self._get_classification_mode()
+        multilabel = self._get_num_labels() > 1
 
         # Create dataloader from dataset
         data_loader = DataLoader(
@@ -143,10 +118,10 @@ class BaseGFMSupervisedClassificationTask(BaseGFMSupervisedTask):
         )
 
         # Initialize metric classes matching the classification mode
-        if classification_mode == ClassificationMode.MULTI_LABEL:
+        if multilabel:
             metrics = [
-                MultiLabelClassificationAUROC(),
-                MultiLabelClassificationAUPRC(),
+                ClassificationAUROC(multilabel=True),
+                ClassificationAUPRC(multilabel=True),
             ]
         else:
             metrics = [
@@ -174,7 +149,7 @@ class BaseGFMSupervisedClassificationTask(BaseGFMSupervisedTask):
                     f"Expected probabilities with shape [batch_size, {output_dim}], "
                     f"but got {probs.shape}"
                 )
-                if classification_mode == ClassificationMode.SINGLE_LABEL:
+                if not multilabel:
                     # Verify that probabilities sum to 1 (with epsilon tolerance).
                     # Multi-label probabilities are independent, so they are not checked.
                     prob_sums = probs.sum(axis=1)
@@ -193,8 +168,8 @@ class BaseGFMSupervisedClassificationTask(BaseGFMSupervisedTask):
         return {metric.name: metric.get_final_results() for metric in metrics}
 
     @abstractmethod
-    def _get_input_structure(self) -> InputStructure:
-        """Subclasses must implement this: return the input structure of the task"""
+    def _is_variant_effect_prediction(self) -> bool:
+        """Subclasses must implement this: return whether examples are variant/reference pairs."""
         pass
 
     @abstractmethod

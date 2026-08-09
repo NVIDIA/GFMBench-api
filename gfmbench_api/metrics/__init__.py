@@ -19,8 +19,6 @@ from .classification_accuracy import ClassificationAccuracy
 from .classification_mcc import ClassificationMCC
 from .classification_auroc import ClassificationAUROC
 from .classification_auprc import ClassificationAUPRC
-from .multilabel_classification_auroc import MultiLabelClassificationAUROC
-from .multilabel_classification_auprc import MultiLabelClassificationAUPRC
 from .regression_pearsonr import RegressionPearsonR
 from .regression_r2 import RegressionR2
 from .snv_variant_effect_cosine_sim_auroc import SNVVariantEffectCosineSimAUROC
@@ -41,8 +39,6 @@ __all__ = [
     'ClassificationMCC',
     'ClassificationAUROC',
     'ClassificationAUPRC',
-    'MultiLabelClassificationAUROC',
-    'MultiLabelClassificationAUPRC',
     'RegressionPearsonR',
     'RegressionR2',
     'SNVVariantEffectCosineSimAUROC',

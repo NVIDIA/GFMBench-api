@@ -19,8 +19,6 @@ import numpy as np
 
 from gfmbench_api.tasks.base.base_gfm_supervised_classification_task import (
     BaseGFMSupervisedClassificationTask,
-    ClassificationMode,
-    InputStructure,
 )
 
 
@@ -45,9 +43,9 @@ class BaseGFMSupervisedVariantEffectTask(BaseGFMSupervisedClassificationTask):
         - get_conditional_input_meta_data_frame(): Return metadata schema for conditional inputs or None
     """
 
-    def _get_input_structure(self) -> InputStructure:
-        """Return the input structure of this task: a variant/reference pair per example."""
-        return InputStructure.VARIANT_REFERENCE_PAIR
+    def _is_variant_effect_prediction(self) -> bool:
+        """Return True since this is a variant effect prediction task."""
+        return True
 
     def _batch_to_probs(
         self, batch: Any, model: Any
@@ -73,7 +71,7 @@ class BaseGFMSupervisedVariantEffectTask(BaseGFMSupervisedClassificationTask):
         # predict one independent probability per label.
         method = (
             "infer_variant_ref_sequences_to_multilabel_probs"
-            if self._get_classification_mode() == ClassificationMode.MULTI_LABEL
+            if self._get_num_labels() > 1
             else "infer_variant_ref_sequences_to_labels_probs"
         )
 

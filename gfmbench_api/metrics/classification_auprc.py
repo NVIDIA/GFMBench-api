@@ -22,11 +22,15 @@ from .base_metric import BaseMetric
 
 class ClassificationAUPRC(BaseMetric):
     """
-    Single-label classification Area Under the Precision-Recall Curve (AUPRC) metric.
+    Classification Area Under the Precision-Recall Curve (AUPRC).
 
-    Receives probabilities per class for the entire dataset and ground truth labels.
-    Calculates AUPRC for binary or multi-class classification.
+    Supports binary and multi-class single-label classification, as well as
+    independent binary targets for multi-label classification.
     """
+
+    def __init__(self, multilabel=False):
+        self.multilabel = multilabel
+        super().__init__()
 
     def reset(self):
         """Reset internal storage."""
@@ -37,12 +41,14 @@ class ClassificationAUPRC(BaseMetric):
     @property
     def name(self):
         """Return the key name for results dictionary."""
+        if self.multilabel:
+            return "multilabel_auprc_macro"
         return "classification_auprc"
 
     def _calc_impl(self, probs, gt):
         """Store probabilities and labels for AUPRC calculation."""
-        self._probs_list.append(probs)
-        self._gt_list.append(gt)
+        self._probs_list.append(np.asarray(probs))
+        self._gt_list.append(np.asarray(gt))
 
     def get_final_results(self):
         """Calculate AUPRC from stored probabilities."""
@@ -50,8 +56,20 @@ class ClassificationAUPRC(BaseMetric):
             return None
 
         # Concatenate all batches
-        probs = np.concatenate(self._probs_list)
-        gt = np.concatenate(self._gt_list)
+        probs = np.concatenate(self._probs_list, axis=0)
+        gt = np.concatenate(self._gt_list, axis=0)
+
+        if self.multilabel:
+            if probs.ndim != 2:
+                return None
+
+            scores = []
+            for label_idx in range(probs.shape[1]):
+                y_true = gt[:, label_idx]
+                if y_true.sum() == 0:
+                    continue
+                scores.append(average_precision_score(y_true, probs[:, label_idx]))
+            return float(np.mean(scores)) if scores else None
 
         if probs.shape[1] == 2:
             # Binary classification: use probabilities of positive class

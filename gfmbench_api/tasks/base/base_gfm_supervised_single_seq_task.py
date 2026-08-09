@@ -19,8 +19,6 @@ import numpy as np
 
 from gfmbench_api.tasks.base.base_gfm_supervised_classification_task import (
     BaseGFMSupervisedClassificationTask,
-    ClassificationMode,
-    InputStructure,
 )
 
 
@@ -42,9 +40,9 @@ class BaseGFMSupervisedSingleSeqTask(BaseGFMSupervisedClassificationTask):
         - get_conditional_input_meta_data_frame(): Return metadata schema for conditional inputs or None
     """
 
-    def _get_input_structure(self) -> InputStructure:
-        """Return the input structure of this task: a single sequence per example."""
-        return InputStructure.SEQUENCE
+    def _is_variant_effect_prediction(self) -> bool:
+        """Return False since this is a single-sequence task, not variant effect."""
+        return False
 
     def _batch_to_probs(
         self, batch: Any, model: Any
@@ -70,7 +68,7 @@ class BaseGFMSupervisedSingleSeqTask(BaseGFMSupervisedClassificationTask):
         # predict one independent probability per label.
         method = (
             "infer_sequence_to_multilabel_probs"
-            if self._get_classification_mode() == ClassificationMode.MULTI_LABEL
+            if self._get_num_labels() > 1
             else "infer_sequence_to_labels_probs"
         )
 
