@@ -39,15 +39,9 @@ from gfmbench_api.tasks.base.base_gfm_task import BaseGFMTask
 
 # Supervised task hierarchy
 from gfmbench_api.tasks.base.base_gfm_supervised_task import BaseGFMSupervisedTask
-from gfmbench_api.tasks.base.base_gfm_supervised_classification_task import (
-    BaseGFMSupervisedClassificationTask,
-)
-from gfmbench_api.tasks.base.base_gfm_supervised_single_seq_task import (
-    BaseGFMSupervisedSingleSeqTask,
-)
-from gfmbench_api.tasks.base.base_gfm_supervised_variant_effect_task import (
-    BaseGFMSupervisedVariantEffectTask,
-)
+from gfmbench_api.tasks.base.base_gfm_supervised_classification_task import BaseGFMSupervisedClassificationTask
+from gfmbench_api.tasks.base.base_gfm_supervised_single_seq_task import BaseGFMSupervisedSingleSeqTask
+from gfmbench_api.tasks.base.base_gfm_supervised_variant_effect_task import BaseGFMSupervisedVariantEffectTask
 from gfmbench_api.tasks.base.base_gfm_supervised_regression_task import (
     BaseGFMSupervisedRegressionTask,
     OutputSpatiality,

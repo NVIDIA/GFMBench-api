@@ -29,9 +29,7 @@ from pyfaidx import Fasta
 from typing import Any, Tuple, Optional, Dict, List
 
 # Framework Imports
-from gfmbench_api.tasks.base.base_gfm_supervised_variant_effect_task import (
-    BaseGFMSupervisedVariantEffectTask,
-)
+from gfmbench_api.tasks.base.base_gfm_supervised_variant_effect_task import BaseGFMSupervisedVariantEffectTask
 from gfmbench_api.utils.fileutils import ensure_hf_hub_file, ensure_reference_genome
 from gfmbench_api.utils.preprocutils import standardize_sequence, pad_sequence_centered_variant
 

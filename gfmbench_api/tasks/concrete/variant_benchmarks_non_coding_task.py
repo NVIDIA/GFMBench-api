@@ -23,9 +23,7 @@ import pandas as pd
 import torch
 from datasets import DatasetDict
 
-from gfmbench_api.tasks.base.base_gfm_supervised_variant_effect_task import (
-    BaseGFMSupervisedVariantEffectTask,
-)
+from gfmbench_api.tasks.base.base_gfm_supervised_variant_effect_task import BaseGFMSupervisedVariantEffectTask
 import numpy as np
 from gfmbench_api.utils.fileutils import download_hf_dataset_files
 from gfmbench_api.utils.preprocutils import build_forward_centered_seqs

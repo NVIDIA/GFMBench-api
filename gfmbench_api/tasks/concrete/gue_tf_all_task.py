@@ -23,9 +23,7 @@ import pandas as pd
 import torch
 from torch.utils.data import Dataset
 
-from gfmbench_api.tasks.base.base_gfm_supervised_single_seq_task import (
-    BaseGFMSupervisedSingleSeqTask,
-)
+from gfmbench_api.tasks.base.base_gfm_supervised_single_seq_task import BaseGFMSupervisedSingleSeqTask
 import numpy as np
 from gfmbench_api.utils.fileutils import download_hf_dataset_files
 from gfmbench_api.utils.preprocutils import truncate_sequence_from_ends

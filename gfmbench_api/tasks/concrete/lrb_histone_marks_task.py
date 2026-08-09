@@ -23,9 +23,7 @@ from typing import Any, Dict, Optional, Tuple
 import pandas as pd
 from torch.utils.data import Dataset
 
-from gfmbench_api.tasks.base.base_gfm_supervised_single_seq_task import (
-    BaseGFMSupervisedSingleSeqTask,
-)
+from gfmbench_api.tasks.base.base_gfm_supervised_single_seq_task import BaseGFMSupervisedSingleSeqTask
 from gfmbench_api.utils.lrb_local import build_chromatin_examples
 
 
