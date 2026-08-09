@@ -29,6 +29,10 @@ class ClassificationMCC(BaseMetric):
     Applies to binary and multi-class classification.
     """
 
+    def __init__(self):
+        """Initialize storage for predictions and ground truth labels."""
+        super().__init__()
+
     def reset(self):
         """Reset internal storage."""
         super().reset()
