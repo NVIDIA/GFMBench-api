@@ -48,7 +48,18 @@ class BenchmarkReport:
             self._df = pd.read_csv(csv_path)
         else:
             self._df = pd.DataFrame(columns=['task', 'metric'])
-    
+
+    def _ensure_object_column(self, model_name: str) -> None:
+        """
+        Force a model column to `object` dtype.
+
+        Model columns hold a mix of floats and the NO_RESULTS sentinel string.
+        Newer pandas infers all-string columns as the immutable `str` dtype
+        (PyArrow-backed), which rejects float assignment. `object` accepts both.
+        """
+        if self._df[model_name].dtype != object:
+            self._df[model_name] = self._df[model_name].astype(object)
+
     def add_scores(self, task_name: str, model_name: str, results: Dict[str, Optional[float]]) -> None:
         """
         Add scores for a task/model combination to the report.
@@ -60,8 +71,12 @@ class BenchmarkReport:
         """
         # Add model column if it doesn't exist, filling existing rows with NO_RESULTS
         if model_name not in self._df.columns:
-            self._df[model_name] = self.NO_RESULTS
-        
+            self._df[model_name] = pd.Series(
+                [self.NO_RESULTS] * len(self._df), index=self._df.index, dtype=object
+            )
+        else:
+            self._ensure_object_column(model_name)
+
         # Process each metric in the results
         for metric_name, score in results.items():
             # Check if this task/metric combination already exists
@@ -80,6 +95,9 @@ class BenchmarkReport:
                 new_row[model_name] = score
                 
                 self._df = pd.concat([self._df, pd.DataFrame([new_row])], ignore_index=True)
+                # concat re-infers dtypes; a column that is still all-NO_RESULTS
+                # would come back as `str` and reject the next float score.
+                self._ensure_object_column(model_name)
     
     def get_dataframe(self) -> pd.DataFrame:
         """
