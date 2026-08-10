@@ -24,13 +24,8 @@ class ClassificationAUROC(BaseMetric):
     """
     Classification Area Under the Receiver Operating Characteristic curve (AUROC).
 
-    Supports binary and multi-class single-label classification, as well as
-    independent binary targets for multi-label classification.
+    Supports binary and multi-class classification for one or more labels.
     """
-
-    def __init__(self, multilabel=False):
-        self.multilabel = multilabel
-        super().__init__()
 
     def reset(self):
         """Reset internal storage."""
@@ -41,14 +36,13 @@ class ClassificationAUROC(BaseMetric):
     @property
     def name(self):
         """Return the key name for results dictionary."""
-        if self.multilabel:
-            return "multilabel_auroc_macro"
         return "classification_auroc"
 
     def _calc_impl(self, probs, gt):
         """Store probabilities and labels for AUROC calculation."""
-        self._probs_list.append(np.asarray(probs))
-        self._gt_list.append(np.asarray(gt))
+        probs, gt = self._normalize_classification_inputs(probs, gt)
+        self._probs_list.append(probs)
+        self._gt_list.append(gt)
 
     def get_final_results(self):
         """Calculate AUROC from stored probabilities."""
@@ -59,20 +53,22 @@ class ClassificationAUROC(BaseMetric):
         probs = np.concatenate(self._probs_list, axis=0)
         gt = np.concatenate(self._gt_list, axis=0)
 
-        if self.multilabel:
-            if probs.ndim != 2:
-                return None
+        scores = []
+        for label_idx in range(gt.shape[1]):
+            y_true = gt[:, label_idx]
+            if np.unique(y_true).size < 2:
+                # AUROC is undefined when the ground truth has no positive samples.
+                continue
 
-            scores = []
-            for label_idx in range(probs.shape[1]):
-                y_true = gt[:, label_idx]
-                if np.unique(y_true).size < 2:
-                    continue
-                scores.append(roc_auc_score(y_true, probs[:, label_idx]))
-            return float(np.mean(scores)) if scores else None
+            label_probs = probs[:, label_idx, :]
+            if label_probs.shape[1] == 2:
+                # Binary classification: use probabilities of positive class
+                score = roc_auc_score(y_true, label_probs[:, 1])
+            else:
+                # Multi-class classification: use probabilities of each class
+                score = roc_auc_score(
+                    y_true, label_probs, multi_class="ovr", average="macro"
+                )
+            scores.append(score)
 
-        if probs.shape[1] == 2:
-            # Binary classification: use probabilities of positive class
-            return roc_auc_score(gt, probs[:, 1])
-        # Multi-class: use macro averaging with ovr (one-vs-rest)
-        return roc_auc_score(gt, probs, multi_class="ovr", average="macro")
+        return float(np.mean(scores)) if scores else None

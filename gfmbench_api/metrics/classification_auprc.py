@@ -24,13 +24,8 @@ class ClassificationAUPRC(BaseMetric):
     """
     Classification Area Under the Precision-Recall Curve (AUPRC).
 
-    Supports binary and multi-class single-label classification, as well as
-    independent binary targets for multi-label classification.
+    Supports binary and multi-class classification for one or more labels.
     """
-
-    def __init__(self, multilabel=False):
-        self.multilabel = multilabel
-        super().__init__()
 
     def reset(self):
         """Reset internal storage."""
@@ -41,14 +36,13 @@ class ClassificationAUPRC(BaseMetric):
     @property
     def name(self):
         """Return the key name for results dictionary."""
-        if self.multilabel:
-            return "multilabel_auprc_macro"
         return "classification_auprc"
 
     def _calc_impl(self, probs, gt):
         """Store probabilities and labels for AUPRC calculation."""
-        self._probs_list.append(np.asarray(probs))
-        self._gt_list.append(np.asarray(gt))
+        probs, gt = self._normalize_classification_inputs(probs, gt)
+        self._probs_list.append(probs)
+        self._gt_list.append(gt)
 
     def get_final_results(self):
         """Calculate AUPRC from stored probabilities."""
@@ -59,20 +53,24 @@ class ClassificationAUPRC(BaseMetric):
         probs = np.concatenate(self._probs_list, axis=0)
         gt = np.concatenate(self._gt_list, axis=0)
 
-        if self.multilabel:
-            if probs.ndim != 2:
-                return None
+        scores = []
+        for label_idx in range(gt.shape[1]):
+            y_true = gt[:, label_idx]
+            label_probs = probs[:, label_idx, :]
 
-            scores = []
-            for label_idx in range(probs.shape[1]):
-                y_true = gt[:, label_idx]
-                if y_true.sum() == 0:
+            if label_probs.shape[1] == 2:
+                # AUPRC is undefined when the ground truth has no positive samples.
+                if np.count_nonzero(y_true == 1) == 0:
                     continue
-                scores.append(average_precision_score(y_true, probs[:, label_idx]))
-            return float(np.mean(scores)) if scores else None
+                # Binary classification: use probabilities of positive class
+                score = average_precision_score(y_true, label_probs[:, 1])
+            else:
+                # Multi-class classification: use probabilities of each class
+                classes = np.arange(label_probs.shape[1])
+                y_true_one_hot = (y_true[:, np.newaxis] == classes).astype(int)
+                score = average_precision_score(
+                    y_true_one_hot, label_probs, average="macro"
+                )
+            scores.append(score)
 
-        if probs.shape[1] == 2:
-            # Binary classification: use probabilities of positive class
-            return average_precision_score(gt, probs[:, 1])
-        # Multi-class: use macro averaging
-        return average_precision_score(gt, probs, average="macro")
+        return float(np.mean(scores)) if scores else None

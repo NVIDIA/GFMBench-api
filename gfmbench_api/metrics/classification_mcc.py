@@ -22,11 +22,9 @@ from .base_metric import BaseMetric
 
 class ClassificationMCC(BaseMetric):
     """
-    Single-label classification Matthews Correlation Coefficient (MCC) metric.
+    Classification Matthews Correlation Coefficient (MCC) metric.
 
-    Receives probabilities per class for the entire dataset and ground truth labels.
-    Performs argmax on probabilities and compares to ground truth for MCC score.
-    Applies to binary and multi-class classification.
+    Supports binary and multi-class classification for one or more labels.
     """
 
     def __init__(self):
@@ -46,11 +44,9 @@ class ClassificationMCC(BaseMetric):
 
     def _calc_impl(self, probs, gt):
         """Compute predictions via argmax and store them."""
+        probs, gt = self._normalize_classification_inputs(probs, gt)
+        predictions = np.argmax(probs, axis=-1)
 
-        # Perform argmax to get predicted labels
-        predictions = np.argmax(probs, axis=1)
-
-        # Store only predictions and labels
         self._predictions_list.append(predictions)
         self._gt_list.append(gt)
 
@@ -63,5 +59,8 @@ class ClassificationMCC(BaseMetric):
         all_predictions = np.concatenate(self._predictions_list)
         all_gt = np.concatenate(self._gt_list)
 
-        # Calculate MCC
-        return matthews_corrcoef(all_gt, all_predictions)
+        scores = [
+            matthews_corrcoef(all_gt[:, label_idx], all_predictions[:, label_idx])
+            for label_idx in range(all_gt.shape[1])
+        ]
+        return float(np.mean(scores))

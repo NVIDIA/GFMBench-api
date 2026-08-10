@@ -22,11 +22,9 @@ from .base_metric import BaseMetric
 
 class ClassificationAccuracy(BaseMetric):
     """
-    Single-label classification accuracy metric.
+    Classification accuracy metric.
 
-    Receives probabilities per class for the entire dataset and ground truth labels.
-    Performs argmax on probabilities and compares to ground truth for accuracy score.
-    Applies to binary and multi-class classification.
+    Supports binary and multi-class classification for one or more labels.
     """
 
     def __init__(self):
@@ -46,10 +44,9 @@ class ClassificationAccuracy(BaseMetric):
 
     def _calc_impl(self, probs, gt):
         """Compute predictions via argmax and store them."""
-        # Perform argmax to get predicted labels
-        predictions = np.argmax(probs, axis=1)
-        
-        # Store only predictions and labels
+        probs, gt = self._normalize_classification_inputs(probs, gt)
+        predictions = np.argmax(probs, axis=-1)
+
         self._predictions_list.append(predictions)
         self._gt_list.append(gt)
 
@@ -62,5 +59,8 @@ class ClassificationAccuracy(BaseMetric):
         all_predictions = np.concatenate(self._predictions_list)
         all_gt = np.concatenate(self._gt_list)
 
-        # Calculate accuracy
-        return accuracy_score(all_gt, all_predictions)
+        scores = [
+            accuracy_score(all_gt[:, label_idx], all_predictions[:, label_idx])
+            for label_idx in range(all_gt.shape[1])
+        ]
+        return float(np.mean(scores))

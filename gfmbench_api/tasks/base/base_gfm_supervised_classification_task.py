@@ -100,14 +100,12 @@ class BaseGFMSupervisedClassificationTask(BaseGFMSupervisedTask):
 
         Returns:
             dict: Scores with metric names as keys.
-                For single-label tasks:
                 - 'classification_accuracy': Accuracy score (0-1)
                 - 'classification_mcc': Matthews Correlation Coefficient
                 - 'classification_auroc': Area Under ROC Curve
                 - 'classification_auprc': Area Under Precision-Recall Curve
-                For multi-label tasks:
-                - 'multilabel_auroc_macro': Area Under ROC Curve, averaged over labels
-                - 'multilabel_auprc_macro': Area Under Precision-Recall Curve, averaged over labels
+
+                For multi-label tasks, each metric is macro-averaged over labels.
         """
         self._validate_classification_methods()
         multilabel = self._get_num_labels() > 1
@@ -117,19 +115,12 @@ class BaseGFMSupervisedClassificationTask(BaseGFMSupervisedTask):
             dataset, batch_size=self.batch_size, shuffle=False, num_workers=self.num_workers
         )
 
-        # Initialize metric classes matching the classification mode
-        if multilabel:
-            metrics = [
-                ClassificationAUROC(multilabel=True),
-                ClassificationAUPRC(multilabel=True),
-            ]
-        else:
-            metrics = [
-                ClassificationAccuracy(),
-                ClassificationMCC(),
-                ClassificationAUROC(),
-                ClassificationAUPRC(),
-            ]
+        metrics = [
+            ClassificationAccuracy(),
+            ClassificationMCC(),
+            ClassificationAUROC(),
+            ClassificationAUPRC(),
+        ]
 
         for batch in tqdm(data_loader, desc="Evaluating"):
             # Delegate to subclass for batch processing
