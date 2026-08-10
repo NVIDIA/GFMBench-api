@@ -44,7 +44,7 @@ class ClassificationMCC(BaseMetric):
 
     def _calc_impl(self, probs, gt):
         """Compute predictions via argmax and store them."""
-        probs, gt = self._normalize_classification_inputs(probs, gt)
+        probs, gt = self._reshape_classification_inputs(probs, gt)
         predictions = np.argmax(probs, axis=-1)
 
         self._predictions_list.append(predictions)

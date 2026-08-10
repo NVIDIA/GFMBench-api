@@ -74,7 +74,7 @@ class BaseMetric(ABC):
         self._calc_impl(*args, **kwargs)
 
     @staticmethod
-    def _normalize_classification_inputs(probs, gt):
+    def _reshape_classification_inputs(probs, gt):
         """Return probabilities [samples, labels, classes] and labels [samples, labels]."""
         probs = np.asarray(probs)
         gt = np.asarray(gt)

@@ -122,7 +122,7 @@ class BaseGFMSupervisedClassificationTask(BaseGFMSupervisedTask):
 
             # Verify model output is valid
             if probs is not None:
-                probs, labels_np = BaseMetric._normalize_classification_inputs(
+                probs, labels_np = BaseMetric._reshape_classification_inputs(
                     probs, labels_np
                 )
 

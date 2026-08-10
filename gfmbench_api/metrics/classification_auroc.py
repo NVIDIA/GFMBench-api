@@ -40,7 +40,7 @@ class ClassificationAUROC(BaseMetric):
 
     def _calc_impl(self, probs, gt):
         """Store probabilities and labels for AUROC calculation."""
-        probs, gt = self._normalize_classification_inputs(probs, gt)
+        probs, gt = self._reshape_classification_inputs(probs, gt)
         self._probs_list.append(probs)
         self._gt_list.append(gt)
 
