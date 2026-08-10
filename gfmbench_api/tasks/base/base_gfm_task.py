@@ -149,8 +149,14 @@ class BaseGFMTask(ABC):
         Required keys:
             "has_finetuning_data": [bool] - whether this task has training data for fine-tuning
             "has_validation_data": [bool] - whether this task has validation data
-            "is_variant_effect_prediction": [bool] - whether this is a variant effect prediction task
-            "num_labels": [int] - number of labels for classification (only for classification tasks)
+            "task_type": [str] - prediction objective, such as "classification",
+                or "regression" (supervised tasks)
+            "classification_mode": [str] - "single_label" or "multi_label"
+                (only for classification tasks)
+            "num_labels": [int] - number of labels for a supervised task
+            "num_classes": [int] - number of classes per classification target
+            "output_spatiality": [str] - "sequence" or "binned" (only for regression tasks)
+            "is_variant_effect_prediction": [bool] - whether a task predicts variant effects
             "is_snv_only_variants": [bool] - whether this task uses only SNV variants (only for zero-shot variant tasks)
             "conditional_input_metadata": [Optional[pd.DataFrame]] - metadata schema for conditional inputs,
                 or None if task has no metadata. Should call get_conditional_input_meta_data_frame().

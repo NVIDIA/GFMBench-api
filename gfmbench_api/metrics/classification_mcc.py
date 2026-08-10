@@ -15,55 +15,52 @@
 
 # This module does not embed third-party data download URLs.
 import numpy as np
-from sklearn.metrics import roc_auc_score
+from sklearn.metrics import matthews_corrcoef
+
 from .base_metric import BaseMetric
 
 
-class MultiLabelClassificationAUROC(BaseMetric):
+class ClassificationMCC(BaseMetric):
     """
-    Multi-label classification Area Under the Receiver Operating Characteristic curve (AUROC) metric.
-    
-    Receives probabilities per label for the entire dataset and ground truth labels.
-    Calculates AUROC for binary or multi-class classification.
+    Classification Matthews Correlation Coefficient (MCC) metric.
+
+    Supports binary and multi-class classification for one or more labels.
     """
-    
+
     def __init__(self):
         """Initialize storage for probabilities and ground truth labels."""
         super().__init__()
-    
+
     def reset(self):
         """Reset internal storage."""
         super().reset()
-        self._probs_list = []
+        self._predictions_list = []
         self._gt_list = []
-    
+
     @property
     def name(self):
         """Return the key name for results dictionary."""
-        return "classification_auroc"
-    
-    def _calc_impl(self, probs, gt):
-        """Store probabilities and labels for AUROC calculation."""
-        # Store probabilities and labels as numpy arrays
-        self._probs_list.append(probs)
-        self._gt_list.append(gt)
-    
-    def get_final_results(self):
-        """Calculate AUROC from stored probabilities."""
-        if not self._probs_list:
-            return None
-        
-        # Concatenate all batches
-        all_probs = np.concatenate(self._probs_list)
-        all_gt = np.concatenate(self._gt_list)
-        
-        # Determine number of classes
-        num_classes = all_probs.shape[1]
-        
-        if num_classes == 2:
-            # Binary classification: use probabilities of positive class
-            return roc_auc_score(all_gt, all_probs[:, 1])
-        else:
-            # Multi-class: use macro averaging with ovr (one-vs-rest)
-            return roc_auc_score(all_gt, all_probs, multi_class='ovr', average='macro')
+        return "classification_mcc"
 
+    def _calc_impl(self, probs, gt):
+        """Compute predictions via argmax and store them."""
+        probs, gt = self._reshape_classification_inputs(probs, gt)
+        predictions = np.argmax(probs, axis=-1)
+
+        self._predictions_list.append(predictions)
+        self._gt_list.append(gt)
+
+    def get_final_results(self):
+        """Calculate MCC from stored predictions."""
+        if not self._predictions_list:
+            return None
+
+        # Concatenate all batches
+        all_predictions = np.concatenate(self._predictions_list)
+        all_gt = np.concatenate(self._gt_list)
+
+        scores = [
+            matthews_corrcoef(all_gt[:, label_idx], all_predictions[:, label_idx])
+            for label_idx in range(all_gt.shape[1])
+        ]
+        return float(np.mean(scores))

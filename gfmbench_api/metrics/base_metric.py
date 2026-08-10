@@ -17,6 +17,8 @@
 import logging
 from abc import ABC, abstractmethod
 
+import numpy as np
+
 
 class BaseMetric(ABC):
     """
@@ -70,6 +72,31 @@ class BaseMetric(ABC):
         
         # Delegate to concrete implementation
         self._calc_impl(*args, **kwargs)
+
+    @staticmethod
+    def _reshape_classification_inputs(probs, gt):
+        """Return probabilities [samples, labels, classes] and labels [samples, labels]."""
+        probs = np.asarray(probs)
+        gt = np.asarray(gt)
+
+        if gt.ndim == 1:
+            if probs.ndim != 2:
+                raise ValueError(
+                    "Single-label probabilities must have shape [samples, classes]"
+                )
+            gt = gt[:, np.newaxis]
+            probs = probs[:, np.newaxis, :]
+        elif gt.ndim == 2:
+            if probs.ndim == 2:
+                # Binary multi-label probabilities omit the class dimension.
+                probs = np.stack((1.0 - probs, probs), axis=-1)
+            elif probs.ndim != 3:
+                raise ValueError(
+                    "Multi-label probabilities must have shape "
+                    "[samples, labels, classes]"
+                )
+
+        return probs, gt
     
     @abstractmethod
     def _calc_impl(self, *args, **kwargs):

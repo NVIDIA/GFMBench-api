@@ -2,6 +2,18 @@
 
 GFMBench-API is an extensible benchmarking suite for assessing genomic foundation models (GFMs) across a diverse set of downstream tasks, including classification, variant effect prediction, and zero-shot evaluation.
 
+This repository accompanies the paper [**“GFMBench-API: A Standardized Interface for Benchmarking Genomic Foundation Models”**](https://doi.org/10.64898/2026.02.19.706811) (bioRxiv, 2026). If you use GFMBench-API in your research, please cite the paper:
+
+```bibtex
+@article{larey2026gfmbench,
+  title   = {GFMBench-API: A Standardized Interface for Benchmarking Genomic Foundation Models},
+  author  = {Larey, Ariel and Dahan, Elay and Bleiweiss, Amit and Kellerman, Raizy and Leib, Guy and Nayshool, Omri and Ofer, Dan and Zinger, Tal and Dominissini, Dan and Rechavi, Gideon and Bussola, Nicole and Lee, Simon and O'Connell, Shane and Hoang, Dung and Wirth, Marissa and Charney, Alexander W. and Shavit, Yoli and Daniel, Nati},
+  journal = {bioRxiv},
+  year    = {2026},
+  doi     = {10.64898/2026.02.19.706811}
+}
+```
+
 ## Quick Start
 
 ### Installation
@@ -128,11 +140,15 @@ Simply implement the methods below in your model class; inheritance is **not** r
 
 | Method Signature                                                                     | Description                            |
 |:-------------------------------------------------------------------------------------|:------------------------------------------|
-| `infer_sequence_to_labels_probs(sequences, ...)`                                     | Takes a list of DNA sequences and returns probabilities for each class label for classification tasks. |
-| `infer_variant_ref_sequences_to_labels_probs(variant_sequences, ref_sequences, ...)`  | Takes lists of variant and reference sequences and returns probabilities for variant effect classification tasks. |
+| `infer_sequence_to_labels_probs(sequences, ...)`                                     | Returns single-label, binary multi-label, or multi-class multi-label probabilities for sequences. |
+| `infer_variant_ref_sequences_to_labels_probs(variant_sequences, ref_sequences, ...)`  | Returns the same classification probability layouts for variant/reference sequence pairs. |
 | `infer_sequence_to_sequence(sequences, ...)`                                         | Takes a list of DNA sequences and returns per-nucleotide probabilities, per-position embeddings, and a single sequence-level embedding. |
 | `sequence_pos_to_prob_pos(sequences, pos)`                                           | Takes a list of DNA sequences and a position index, returns the corresponding output position indices accounting for tokenization differences. |
 | `infer_masked_sequence_to_token_probs(sequences, variant_pos, variant_letters, reference_letters, ...)` | Takes sequences and masks the variant position, returns probabilities for the variant and reference nucleotides at the masked position. |
+
+Classification probabilities use shape `[batch, classes]` for single-label tasks,
+`[batch, labels]` for binary multi-label tasks, and `[batch, labels, classes]`
+for multi-class multi-label tasks.
 
 - Any not-implemented methods can simply return `None` and metrics depending on them will be skipped.
 - See `gfmbench_api/tasks/base/base_gfm_model.py` for detailed docstrings.
@@ -360,11 +376,14 @@ To add a new concrete task, inherit from the appropriate base class based on you
 
 Choose the appropriate base class based on your task:
 
-- **Supervised Single-Sequence Classification**: Inherit from `BaseGFMSupervisedSingleSeqTask`
-  - For tasks with single DNA sequences and categorical labels (e.g., promoter prediction, splice site detection)
-  
-- **Supervised Variant Effect Prediction**: Inherit from `BaseGFMSupervisedVariantEffectTask`
-  - For tasks with paired reference/variant sequences and categorical labels (e.g., pathogenic variant classification)
+- **Single-sequence classification**: Inherit from `BaseGFMSupervisedSingleSeqTask`
+- **Variant-effect classification**: Inherit from `BaseGFMSupervisedVariantEffectTask`
+- Classification mode is derived from `_get_num_labels()`: one label is
+  single-label classification; multiple labels are independent classification targets.
+
+- **Supervised Regression**: Inherit from `BaseGFMSupervisedRegressionTask`
+  - Implement `is_spatial_binned()` to return `True` for binned outputs or
+    `False` for sequence-level outputs
   
 - **Zero-Shot SNV Variant Effect**: Inherit from `BaseGFMZeroShotSNVTask`
   - For zero-shot evaluation of single-nucleotide variants (SNVs) with equal-length reference and variant sequences
@@ -386,9 +405,15 @@ All concrete tasks must implement:
      - `self.max_num_samples`: Limit the number of samples per split if specified (for sanity testing with smaller datasets)
 4. **`get_conditional_input_meta_data_frame() -> Optional[pd.DataFrame]`**: Return metadata DataFrame if task uses conditional inputs, otherwise return `None`
 
-Additional methods for supervised tasks:
+Additional methods for supervised classification tasks:
 
-5. **`_get_num_labels() -> int`**: Return the number of classification labels
+5. **`_get_num_labels() -> int`**: Return the number of predicted labels
+6. **`_get_num_classes() -> int`**: Return the number of classes per label
+
+Additional methods for supervised regression tasks:
+
+5. **`_get_num_labels() -> int`**: Return the number of continuous labels per sequence or bin
+6. **`is_spatial_binned() -> bool`**: Return whether outputs include a spatial bin dimension
 
 Additional methods for zero-shot tasks:
 
@@ -396,7 +421,9 @@ Additional methods for zero-shot tasks:
 ### Example: Supervised Single-Sequence Task
 
 ```python
-from gfmbench_api.tasks.base.base_gfm_supervised_single_seq_task import BaseGFMSupervisedSingleSeqTask
+from gfmbench_api.tasks.base import (
+    BaseGFMSupervisedSingleSeqTask,
+)
 import os
 import pandas as pd
 import torch
@@ -409,8 +436,11 @@ class MyCustomTask(BaseGFMSupervisedSingleSeqTask):
     def _get_default_max_seq_len(self) -> int:
         return 512
     
-    def _get_num_labels(self) -> int:
+    def _get_num_classes(self) -> int:
         return 2  # Binary classification
+
+    def _get_num_labels(self) -> int:
+        return 1
     
     def _create_datasets(self):
         data_dir = os.path.join(self.root_data_dir_path, self.get_task_name())

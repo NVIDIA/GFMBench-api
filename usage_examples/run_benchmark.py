@@ -50,6 +50,8 @@ from gfmbench_api.tasks.concrete.gue_promoter_all_task import GuePromoterAllTask
 from gfmbench_api.tasks.concrete.gue_splice_site_task import GueSpliceSiteTask
 from gfmbench_api.tasks.concrete.gue_tf_all_task import GueTranscriptionFactorTask
 from gfmbench_api.tasks.concrete.lrb_causal_eqtl_task import LRBCausalEqtlTask
+from gfmbench_api.tasks.concrete.lrb_enhancer_task import LRBEnhancerTask
+from gfmbench_api.tasks.concrete.lrb_histone_marks_task import LRBHistoneMarksTask
 from gfmbench_api.tasks.concrete.lrb_pathogenic_omim_task import LrbVariantEffectPathogenicOmimTask
 from gfmbench_api.tasks.concrete.songlab_clinvar_task import SonglabClinvarTask
 from gfmbench_api.tasks.concrete.traitgym_complex_task import TraitGymComplexTask
@@ -73,6 +75,8 @@ TASK_REGISTRY: dict[str, type] = {
     "loleve_causal_eqtl":                LoleveCausalEqtlTask,
     "lrb_variant_effect_causal_eqtl":    LRBCausalEqtlTask,
     "lrb_variant_effect_pathogenic_omim": LrbVariantEffectPathogenicOmimTask,
+    "lrb_regulatory_element_enhancer":   LRBEnhancerTask,
+    "lrb_chromatin_features_histone_marks": LRBHistoneMarksTask,
     "bend_variant_effects_disease":       BendVEPDisease,
     "bend_variant_effects_expression":    BendVEPExpression,
     "gue_promoter_all":                   GuePromoterAllTask,
@@ -363,10 +367,21 @@ def main(argv=None):
             model.load_checkpoint(checkpoint_path)
 
         if has_finetuning_data:
-            # Fine-tune for classification tasks
             hidden_dim = model.get_hidden_dim()
+            task_type = task_attrs["task_type"]
+            if task_type != "classification":
+                raise NotImplementedError(
+                    "The usage-example fine-tuner currently supports classification only."
+                )
+            classification_mode = task_attrs["classification_mode"]
+            is_variant_effect = task_attrs["is_variant_effect_prediction"]
             num_labels = task_attrs["num_labels"]
-            is_variant_effect = task_attrs.get("is_variant_effect_prediction", False)
+            num_classes = task_attrs["num_classes"]
+            num_outputs = (
+                num_classes
+                if num_labels == 1
+                else num_labels if num_classes == 2 else num_labels * num_classes
+            )
             
             train_dataset = task.get_finetune_dataset()
 
@@ -385,12 +400,15 @@ def main(argv=None):
                 model=model,
                 train_loader=train_loader,
                 hidden_dim=hidden_dim,
-                num_labels=num_labels,
+                num_outputs=num_outputs,
                 num_epochs=training_params["num_epochs"],
                 lr=training_params["lr"],
                 optimizer_name=training_params["optimizer"],
                 weight_decay=training_params["weight_decay"],
                 only_proj_layer=training_params["only_proj_layer"],
+                classification_mode=classification_mode,
+                num_labels=num_labels,
+                num_classes=num_classes,
                 is_variant_effect_prediction=is_variant_effect,
                 cache_size=args.cache_size,
                 device=device

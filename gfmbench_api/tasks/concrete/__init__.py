@@ -36,6 +36,7 @@ BEND (zero-shot SNV):
 LRB:
 - lrb_pathogenic_omim_task: LrbVariantEffectPathogenicOmimTask
 - lrb_causal_eqtl_task: LRBCausalEqtlTask
+- lrb_cage_task: LRBCagePredictionTask
 
 TraitGym (zero-shot SNV):
 - traitgym_complex_task: TraitGymComplexTask

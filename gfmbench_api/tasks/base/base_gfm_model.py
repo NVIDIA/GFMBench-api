@@ -49,11 +49,28 @@ class BaseGFMModel(ABC):
             conditional_input: Optional[np.ndarray] - optional metadata inputs of shape [batch_size, num_metadata_inputs].
         
         Returns:
-            np.ndarray of shape [batch_size, num_labels] OR None
-            Probabilities for each label. Returns None if not implemented.
+            Probabilities with shape [batch_size, num_classes] for single-label
+            tasks, [batch_size, num_labels] for binary multi-label tasks, or
+            [batch_size, num_labels, num_classes] for multi-class multi-label
+            tasks. Returns None if not implemented.
         """
         pass
-    
+
+    def infer_sequence_to_regression(
+        self,
+        sequences: List[str],
+        conditional_input: Optional[np.ndarray] = None,
+    ) -> Optional[np.ndarray]:
+        """Return continuous predictions for a supervised regression task.
+
+        The task's ``output_spatiality`` determines the expected shape:
+        ``[batch_size, num_outputs]`` for sequence-level regression or
+        ``[batch_size, num_bins, num_outputs]`` for binned regression.
+
+        Models without a fitted regression head may return ``None``.
+        """
+        return None
+
     @abstractmethod
     def infer_sequence_to_sequence(
         self, 
@@ -212,7 +229,9 @@ class BaseGFMModel(ABC):
             conditional_input: Optional[np.ndarray] - optional metadata inputs of shape [batch_size, num_metadata_inputs].
         
         Returns:
-            np.ndarray of shape [batch_size, num_labels] OR None
-            Probabilities for each label. Returns None if not implemented.
+            Probabilities with shape [batch_size, num_classes] for single-label
+            tasks, [batch_size, num_labels] for binary multi-label tasks, or
+            [batch_size, num_labels, num_classes] for multi-class multi-label
+            tasks. Returns None if not implemented.
         """
         pass

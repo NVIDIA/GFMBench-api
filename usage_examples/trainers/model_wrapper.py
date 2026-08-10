@@ -30,18 +30,28 @@ class GFMWithProjection(BaseGFMModel):
     The benchmark treats this as a single unified model.
     """
     
-    def __init__(self, base_model: BaseGFMModel, projection_layer: Optional[nn.Module] = None,
-                 cache_size: Optional[float] = None) -> None:
+    def __init__(
+        self,
+        base_model: BaseGFMModel,
+        projection_layer: Optional[nn.Module] = None,
+        num_labels: int = 1,
+        num_classes: int = 2,
+        cache_size: Optional[float] = None,
+    ) -> None:
         """
         Initialize the wrapped model.
         
         Args:
             base_model: BaseGFMModel instance
             projection_layer: nn.Module - projection layer (optional, for classification tasks)
+            num_labels: number of independent classification targets
+            num_classes: number of classes per target
             cache_size: cache RAM limit in GB; None for unlimited, 0 disables caching
         """
         self.base_model: BaseGFMModel = base_model
         self.projection_layer: Optional[nn.Module] = projection_layer
+        self.num_labels = num_labels
+        self.num_classes = num_classes
         self.device: str = base_model.device
         self.cache_size = cache_size
         self._ref_cache = SequenceInferenceCache(max_size_gb=cache_size)
@@ -49,6 +59,17 @@ class GFMWithProjection(BaseGFMModel):
     def clear_ref_cache(self) -> None:
         """Clear cached reference-sequence inference (call after each benchmark task)."""
         self._ref_cache.clear()
+
+    def _logits_to_probs(self, logits: torch.Tensor) -> np.ndarray:
+        """Convert projection logits to the task's classification probability layout."""
+        if self.num_labels == 1:
+            probs = torch.softmax(logits, dim=1)
+        elif self.num_classes == 2:
+            probs = torch.sigmoid(logits)
+        else:
+            logits = logits.reshape(-1, self.num_labels, self.num_classes)
+            probs = torch.softmax(logits, dim=-1)
+        return probs.cpu().numpy()
 
     def infer_sequence_to_labels_probs(self, sequences: List[str], conditional_input=None) -> Optional[np.ndarray]:
         """
@@ -59,8 +80,8 @@ class GFMWithProjection(BaseGFMModel):
             conditional_input: Optional metadata inputs (not used in this wrapper)
             
         Returns:
-            np.ndarray: Probabilities of shape [batch_size, num_labels] if projection layer exists,
-                       otherwise returns sequence representative embeddings of shape [batch_size, hidden_dim]
+            Classification probabilities if the projection layer exists, otherwise
+            sequence representative embeddings of shape [batch_size, hidden_dim].
         """
         # Get embeddings from base model using infer_sequence_to_sequence
         _, _, sequence_repr_np = self.base_model.infer_sequence_to_sequence(sequences, conditional_input)
@@ -73,9 +94,7 @@ class GFMWithProjection(BaseGFMModel):
             with torch.no_grad():
                 sequence_repr = torch.from_numpy(sequence_repr_np).to(self.device)
                 logits = self.projection_layer(sequence_repr)
-                # Apply softmax to convert logits to probabilities
-                probs = torch.softmax(logits, dim=1)
-                return probs.cpu().numpy()
+                return self._logits_to_probs(logits)
         else:
             return sequence_repr_np
     
@@ -185,8 +204,7 @@ class GFMWithProjection(BaseGFMModel):
             conditional_input: Optional metadata inputs (not used in this wrapper)
             
         Returns:
-            np.ndarray: Probabilities of shape [batch_size, num_labels] if projection layer exists,
-                       otherwise returns None
+            Classification probabilities if the projection layer exists, otherwise None.
         """
         # Get representative embeddings from base model using infer_sequence_to_sequence
         _, _, var_repr_np = self.base_model.infer_sequence_to_sequence(
@@ -213,9 +231,7 @@ class GFMWithProjection(BaseGFMModel):
                 combined_repr = torch.cat([var_repr, ref_repr], dim=1)
                 
                 logits = self.projection_layer(combined_repr)
-                # Apply softmax to convert logits to probabilities
-                probs = torch.softmax(logits, dim=1)
-                return probs.cpu().numpy()
+                return self._logits_to_probs(logits)
         else:
             return None
 

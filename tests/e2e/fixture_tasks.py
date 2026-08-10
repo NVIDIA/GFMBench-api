@@ -73,8 +73,11 @@ class FixtureSupervisedVariantTask(BaseGFMSupervisedVariantEffectTask):
     def _get_default_max_seq_len(self) -> int:
         return 64
 
-    def _get_num_labels(self) -> int:
+    def _get_num_classes(self) -> int:
         return 2
+
+    def _get_num_labels(self) -> int:
+        return 1
 
     def _create_datasets(self) -> Tuple[Optional[Dataset], Optional[Dataset], Dataset]:
         data_dir = _variant_data_dir(self.root_data_dir_path)

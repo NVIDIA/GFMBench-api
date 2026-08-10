@@ -90,9 +90,12 @@ class VariantBenchmarksNonCodingTask(BaseGFMSupervisedVariantEffectTask):
         """Return task's default maximum sequence length (1024bp)."""
         return 1024 # Reported paper's default
     
-    def _get_num_labels(self):
+    def _get_num_classes(self):
         """Return 2 (binary: benign vs. pathogenic)."""
         return 2
+
+    def _get_num_labels(self):
+        return 1
 
     def get_task_name(self):
         """Return task name (identical to data directory name)."""

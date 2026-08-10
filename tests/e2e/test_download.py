@@ -30,6 +30,7 @@ from typing import Type
 import pytest
 
 from gfmbench_api.tasks.concrete.gue_promoter_all_task import GuePromoterAllTask
+from gfmbench_api.tasks.concrete.lrb_cage_task import LRBCagePredictionTask
 from gfmbench_api.utils.fileutils import ensure_reference_genome
 from usage_examples.run_benchmark import TASK_REGISTRY
 
@@ -39,6 +40,8 @@ DOWNLOAD_TASKS: dict[str, Type] = {
     for name, cls in TASK_REGISTRY.items()
     if name not in EXCLUDED_DOWNLOAD_TASKS
 }
+# CAGE is download-tested directly until the benchmark runner supports regression.
+DOWNLOAD_TASKS["lrb_cage_prediction"] = LRBCagePredictionTask
 
 # TraitGym downloads HF data but expects hg38.fa to already exist under data_root.
 TASKS_NEEDING_PREFETCHED_REFERENCE_GENOME = frozenset(
@@ -51,7 +54,7 @@ TASKS_WITHOUT_LOCAL_DATA_DIR = frozenset({"loleve_causal_eqtl"})
 DOWNLOAD_TASK_CONFIG = {
     "max_num_samples": 4,
     "batch_size": 2,
-    "max_sequence_length": 128,
+    "max_sequence_length": 256,
 }
 
 

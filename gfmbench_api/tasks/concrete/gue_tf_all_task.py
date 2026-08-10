@@ -30,6 +30,7 @@ from gfmbench_api.utils.preprocutils import truncate_sequence_from_ends
 
 class GueTranscriptionFactorTask(BaseGFMSupervisedSingleSeqTask):
     """GUE Transcription Factor prediction task (binary classification)."""
+
     def __init__(self, root_data_dir_path: str,
                  task_config: Optional[Dict[str, Any]] = None):
         # HuggingFace dataset source
@@ -41,8 +42,11 @@ class GueTranscriptionFactorTask(BaseGFMSupervisedSingleSeqTask):
     def _get_default_max_seq_len(self) -> int:
         """Return task's default maximum sequence length (100bp)."""
         return 100
+
+    def _get_num_labels(self) -> int:
+        return 1
     
-    def _get_num_labels(self):
+    def _get_num_classes(self):
         """Return 2 (binary: TF binding site vs non-binding site)."""
         return 2
 

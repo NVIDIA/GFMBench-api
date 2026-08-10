@@ -87,8 +87,11 @@ class LRBCausalEqtlTask(BaseGFMSupervisedVariantEffectTask):
     def get_task_name(self) -> str:
         return "lrb_variant_effect_causal_eqtl"
 
-    def _get_num_labels(self) -> int:
+    def _get_num_classes(self) -> int:
         return 2
+
+    def _get_num_labels(self) -> int:
+        return 1
 
     def _get_default_max_seq_len(self) -> int:
         return 1048576 
