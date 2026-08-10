@@ -22,6 +22,7 @@ from torch.utils.data import DataLoader
 from tqdm import tqdm
 
 from gfmbench_api.metrics import (
+    BaseMetric,
     ClassificationAccuracy,
     ClassificationAUPRC,
     ClassificationAUROC,
@@ -37,7 +38,7 @@ class BaseGFMSupervisedClassificationTask(BaseGFMSupervisedTask):
 
     The classification mode is derived from the number of labels: a task with one
     label is single-label (one distribution over num_classes classes), and a task
-    with several labels is multi-label (one independent binary target per label).
+    with several labels is multi-label (one class distribution per label).
 
     Subclasses must implement:
         - _is_variant_effect_prediction(): Return whether examples are variant/reference pairs
@@ -54,25 +55,12 @@ class BaseGFMSupervisedClassificationTask(BaseGFMSupervisedTask):
         """Subclasses must implement this: return number of classes per target"""
         pass
 
-    def _get_output_dim(self) -> int:
-        """
-        Return the expected width of the model output.
-
-        Single-label tasks output one probability per class, multi-label tasks
-        output one probability per label.
-        """
-        if self._get_num_labels() == 1:
-            return self._get_num_classes()
-        return self._get_num_labels()
-
     def _validate_classification_methods(self) -> None:
         """Verify that the values declared by the subclass are consistent."""
-        num_labels = self._validate_num_labels()
+        self._validate_num_labels()
         num_classes = self._get_num_classes()
         if num_classes < 2:
             raise ValueError(f"num_classes must be at least 2, got {num_classes}")
-        if num_labels > 1 and num_classes != 2:
-            raise ValueError("multi_label classification requires binary labels")
 
     def get_task_attributes(self) -> Dict[str, Any]:
         """Return task attributes for classification tasks."""
@@ -108,7 +96,8 @@ class BaseGFMSupervisedClassificationTask(BaseGFMSupervisedTask):
                 For multi-label tasks, each metric is macro-averaged over labels.
         """
         self._validate_classification_methods()
-        multilabel = self._get_num_labels() > 1
+        num_labels = self._get_num_labels()
+        num_classes = self._get_num_classes()
 
         # Create dataloader from dataset
         data_loader = DataLoader(
@@ -133,23 +122,18 @@ class BaseGFMSupervisedClassificationTask(BaseGFMSupervisedTask):
 
             # Verify model output is valid
             if probs is not None:
-                # Verify that the number of predictions matches the expected output width
-                probs = np.asarray(probs)
-                output_dim = self._get_output_dim()
-                assert probs.ndim == 2 and probs.shape[1] == output_dim, (
-                    f"Expected probabilities with shape [batch_size, {output_dim}], "
-                    f"but got {probs.shape}"
+                probs, labels_np = BaseMetric._normalize_classification_inputs(
+                    probs, labels_np
                 )
-                if not multilabel:
-                    # Verify that probabilities sum to 1 (with epsilon tolerance).
-                    # Multi-label probabilities are independent, so they are not checked.
-                    prob_sums = probs.sum(axis=1)
-                    assert np.allclose(
-                        prob_sums, np.ones_like(prob_sums), atol=1e-5
-                    ), (
-                        "Single-label probabilities do not sum to 1. "
-                        f"Got range [{prob_sums.min():.6f}, {prob_sums.max():.6f}]"
-                    )
+
+                # Each class distribution must sum to one.
+                prob_sums = probs.sum(axis=-1)
+                assert np.allclose(
+                    prob_sums, np.ones_like(prob_sums), atol=1e-5
+                ), (
+                    "Class probabilities do not sum to 1. "
+                    f"Got range [{prob_sums.min():.6f}, {prob_sums.max():.6f}]"
+                )
 
             # Calculate intermediate values for each metric
             for metric in metrics:

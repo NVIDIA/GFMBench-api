@@ -27,9 +27,7 @@ class BaseGFMSupervisedSingleSeqTask(BaseGFMSupervisedClassificationTask):
     Base class for single-sequence classification tasks.
 
     Dataset format: (sequence, label, conditional_input) tuples
-    Model inference: infer_sequence_to_labels_probs(sequences, conditional_input) for
-        single-label tasks, infer_sequence_to_multilabel_probs(sequences, conditional_input)
-        for multi-label tasks
+    Model inference: infer_sequence_to_labels_probs(sequences, conditional_input)
 
     Subclasses must implement:
         - _get_num_labels(): Return number of independent classification targets
@@ -52,30 +50,26 @@ class BaseGFMSupervisedSingleSeqTask(BaseGFMSupervisedClassificationTask):
 
         Args:
             batch: Tuple of (sequences, labels, conditional_input) from DataLoader
-            model: Model instance with infer_sequence_to_labels_probs method (single-label)
-                or infer_sequence_to_multilabel_probs method (multi-label)
+            model: Model instance with infer_sequence_to_labels_probs method
 
         Returns:
             Tuple of (probs, labels):
-                - probs: np.ndarray of shape [batch_size, num_classes] for single-label
-                  tasks, [batch_size, num_labels] for multi-label tasks, or None
+                - probs: np.ndarray of shape [batch_size, num_classes] for
+                  single-label tasks, [batch_size, num_labels] for binary
+                  multi-label tasks, [batch_size, num_labels, num_classes] for
+                  multi-class multi-label tasks, or None
                 - labels: labels of shape [batch_size] for single-label tasks,
                   [batch_size, num_labels] for multi-label tasks
         """
         sequences, labels, conditional_input = batch
 
-        # Single-label tasks predict one distribution over classes, multi-label tasks
-        # predict one independent probability per label.
-        method = (
-            "infer_sequence_to_multilabel_probs"
-            if self._get_num_labels() > 1
-            else "infer_sequence_to_labels_probs"
-        )
-
         # Get probabilities from model (returns numpy arrays)
-        # Shape: [batch_size, output_dim] where output_dim = self._get_output_dim()
         probs, = self._safe_model_call(
-            model, method, sequences, conditional_input, num_outputs=1
+            model,
+            "infer_sequence_to_labels_probs",
+            sequences,
+            conditional_input,
+            num_outputs=1,
         )
 
         return probs, labels

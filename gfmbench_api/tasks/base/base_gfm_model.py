@@ -49,8 +49,10 @@ class BaseGFMModel(ABC):
             conditional_input: Optional[np.ndarray] - optional metadata inputs of shape [batch_size, num_metadata_inputs].
         
         Returns:
-            np.ndarray of shape [batch_size, num_labels] OR None
-            Probabilities for each label. Returns None if not implemented.
+            Probabilities with shape [batch_size, num_classes] for single-label
+            tasks, [batch_size, num_labels] for binary multi-label tasks, or
+            [batch_size, num_labels, num_classes] for multi-class multi-label
+            tasks. Returns None if not implemented.
         """
         pass
 
@@ -69,14 +71,6 @@ class BaseGFMModel(ABC):
         """
         return None
 
-    def infer_sequence_to_multilabel_probs(
-        self,
-        sequences: List[str],
-        conditional_input: Optional[np.ndarray] = None,
-    ) -> Optional[np.ndarray]:
-        """Return independent per-label probabilities for sequence inputs."""
-        return None
-    
     @abstractmethod
     def infer_sequence_to_sequence(
         self, 
@@ -235,16 +229,9 @@ class BaseGFMModel(ABC):
             conditional_input: Optional[np.ndarray] - optional metadata inputs of shape [batch_size, num_metadata_inputs].
         
         Returns:
-            np.ndarray of shape [batch_size, num_labels] OR None
-            Probabilities for each label. Returns None if not implemented.
+            Probabilities with shape [batch_size, num_classes] for single-label
+            tasks, [batch_size, num_labels] for binary multi-label tasks, or
+            [batch_size, num_labels, num_classes] for multi-class multi-label
+            tasks. Returns None if not implemented.
         """
         pass
-
-    def infer_variant_ref_sequences_to_multilabel_probs(
-        self,
-        variant_sequences: List[str],
-        ref_sequences: List[str],
-        conditional_input: Optional[np.ndarray] = None,
-    ) -> Optional[np.ndarray]:
-        """Return independent per-label probabilities for paired sequence inputs."""
-        return None

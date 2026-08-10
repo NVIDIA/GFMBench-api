@@ -140,11 +140,15 @@ Simply implement the methods below in your model class; inheritance is **not** r
 
 | Method Signature                                                                     | Description                            |
 |:-------------------------------------------------------------------------------------|:------------------------------------------|
-| `infer_sequence_to_labels_probs(sequences, ...)`                                     | Takes a list of DNA sequences and returns probabilities for each class label for classification tasks. |
-| `infer_variant_ref_sequences_to_labels_probs(variant_sequences, ref_sequences, ...)`  | Takes lists of variant and reference sequences and returns probabilities for variant effect classification tasks. |
+| `infer_sequence_to_labels_probs(sequences, ...)`                                     | Returns single-label, binary multi-label, or multi-class multi-label probabilities for sequences. |
+| `infer_variant_ref_sequences_to_labels_probs(variant_sequences, ref_sequences, ...)`  | Returns the same classification probability layouts for variant/reference sequence pairs. |
 | `infer_sequence_to_sequence(sequences, ...)`                                         | Takes a list of DNA sequences and returns per-nucleotide probabilities, per-position embeddings, and a single sequence-level embedding. |
 | `sequence_pos_to_prob_pos(sequences, pos)`                                           | Takes a list of DNA sequences and a position index, returns the corresponding output position indices accounting for tokenization differences. |
 | `infer_masked_sequence_to_token_probs(sequences, variant_pos, variant_letters, reference_letters, ...)` | Takes sequences and masks the variant position, returns probabilities for the variant and reference nucleotides at the masked position. |
+
+Classification probabilities use shape `[batch, classes]` for single-label tasks,
+`[batch, labels]` for binary multi-label tasks, and `[batch, labels, classes]`
+for multi-class multi-label tasks.
 
 - Any not-implemented methods can simply return `None` and metrics depending on them will be skipped.
 - See `gfmbench_api/tasks/base/base_gfm_model.py` for detailed docstrings.
@@ -375,7 +379,7 @@ Choose the appropriate base class based on your task:
 - **Single-sequence classification**: Inherit from `BaseGFMSupervisedSingleSeqTask`
 - **Variant-effect classification**: Inherit from `BaseGFMSupervisedVariantEffectTask`
 - Classification mode is derived from `_get_num_labels()`: one label is
-  single-label classification; multiple labels are independent binary targets.
+  single-label classification; multiple labels are independent classification targets.
 
 - **Supervised Regression**: Inherit from `BaseGFMSupervisedRegressionTask`
   - Implement `is_spatial_binned()` to return `True` for binned outputs or

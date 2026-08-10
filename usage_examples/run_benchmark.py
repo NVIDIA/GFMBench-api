@@ -375,10 +375,12 @@ def main(argv=None):
                 )
             classification_mode = task_attrs["classification_mode"]
             is_variant_effect = task_attrs["is_variant_effect_prediction"]
+            num_labels = task_attrs["num_labels"]
+            num_classes = task_attrs["num_classes"]
             num_outputs = (
-                task_attrs["num_classes"]
-                if classification_mode == "single_label"
-                else task_attrs["num_labels"]
+                num_classes
+                if num_labels == 1
+                else num_labels if num_classes == 2 else num_labels * num_classes
             )
             
             train_dataset = task.get_finetune_dataset()
@@ -405,6 +407,8 @@ def main(argv=None):
                 weight_decay=training_params["weight_decay"],
                 only_proj_layer=training_params["only_proj_layer"],
                 classification_mode=classification_mode,
+                num_labels=num_labels,
+                num_classes=num_classes,
                 is_variant_effect_prediction=is_variant_effect,
                 cache_size=args.cache_size,
                 device=device

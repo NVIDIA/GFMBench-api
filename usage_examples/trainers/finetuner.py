@@ -42,6 +42,8 @@ class GFMFinetuner:
         weight_decay=0.01,
         only_proj_layer=True,
         classification_mode: str = "single_label",
+        num_labels: int = 1,
+        num_classes: int = 2,
         is_variant_effect_prediction=False,
         cache_size: Optional[float] = None,
         device='cpu'
@@ -60,6 +62,8 @@ class GFMFinetuner:
             weight_decay: weight decay for regularization
             only_proj_layer: if True, only train projection layer; if False, train full model
             classification_mode: classification target semantics
+            num_labels: number of independent classification targets
+            num_classes: number of classes per target
             is_variant_effect_prediction: if True, task uses variant/ref sequence pairs
             cache_size: cache RAM limit in GB; None for unlimited, 0 disables caching
             device: torch device
@@ -74,6 +78,8 @@ class GFMFinetuner:
         self.weight_decay = weight_decay
         self.only_proj_layer = only_proj_layer
         self.classification_mode = classification_mode
+        self.num_labels = num_labels
+        self.num_classes = num_classes
         self.is_variant_effect_prediction = is_variant_effect_prediction
         self.cache_size = cache_size
         self.device = device
@@ -127,7 +133,7 @@ class GFMFinetuner:
         
         criterion = (
             torch.nn.BCEWithLogitsLoss()
-            if self.classification_mode == "multi_label"
+            if self.num_labels > 1 and self.num_classes == 2
             else torch.nn.CrossEntropyLoss()
         )
         
@@ -194,12 +200,16 @@ class GFMFinetuner:
                     else:
                         sequence_repr = self.model._sequence_to_representative(sequences)
 
-                if self.classification_mode == "multi_label":
+                if self.num_labels > 1 and self.num_classes == 2:
                     labels = labels.float()
                 
                 logits = self.projection(sequence_repr)
-                
-                loss = criterion(logits, labels)
+
+                if self.num_labels > 1 and self.num_classes > 2:
+                    logits = logits.reshape(-1, self.num_labels, self.num_classes)
+                    loss = criterion(logits.transpose(1, 2), labels.long())
+                else:
+                    loss = criterion(logits, labels)
                 
                 optimizer.zero_grad()
                 loss.backward()
@@ -225,6 +235,8 @@ class GFMFinetuner:
         wrapped_model = GFMWithProjection(
             self.model,
             self.projection,
+            num_labels=self.num_labels,
+            num_classes=self.num_classes,
             cache_size=self.cache_size,
         )
         wrapped_model.eval()  # Set to eval mode after training

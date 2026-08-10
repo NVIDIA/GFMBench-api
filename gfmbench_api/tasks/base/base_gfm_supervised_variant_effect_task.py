@@ -27,10 +27,9 @@ class BaseGFMSupervisedVariantEffectTask(BaseGFMSupervisedClassificationTask):
     Base class for variant effect classification tasks with variant/reference sequence pairs.
 
     Dataset format: (variant_sequence, ref_sequence, label, conditional_input) tuples
-    Model inference: infer_variant_ref_sequences_to_labels_probs(variant_sequences,
-        ref_sequences, conditional_input) for single-label tasks,
-        infer_variant_ref_sequences_to_multilabel_probs(variant_sequences, ref_sequences,
-        conditional_input) for multi-label tasks
+    Model inference: infer_variant_ref_sequences_to_labels_probs(
+        variant_sequences, ref_sequences, conditional_input
+    )
 
     Note: Order is variant first, then reference - consistent with zero-shot variant tasks.
 
@@ -56,30 +55,22 @@ class BaseGFMSupervisedVariantEffectTask(BaseGFMSupervisedClassificationTask):
         Args:
             batch: Tuple of (variant_sequences, ref_sequences, labels, conditional_input) from DataLoader
             model: Model instance with infer_variant_ref_sequences_to_labels_probs method
-                (single-label) or infer_variant_ref_sequences_to_multilabel_probs method (multi-label)
 
         Returns:
             Tuple of (probs, labels):
-                - probs: np.ndarray of shape [batch_size, num_classes] for single-label
-                  tasks, [batch_size, num_labels] for multi-label tasks, or None
+                - probs: np.ndarray of shape [batch_size, num_classes] for
+                  single-label tasks, [batch_size, num_labels] for binary
+                  multi-label tasks, [batch_size, num_labels, num_classes] for
+                  multi-class multi-label tasks, or None
                 - labels: labels of shape [batch_size] for single-label tasks,
                   [batch_size, num_labels] for multi-label tasks
         """
         variant_sequences, ref_sequences, labels, conditional_input = batch
 
-        # Single-label tasks predict one distribution over classes, multi-label tasks
-        # predict one independent probability per label.
-        method = (
-            "infer_variant_ref_sequences_to_multilabel_probs"
-            if self._get_num_labels() > 1
-            else "infer_variant_ref_sequences_to_labels_probs"
-        )
-
         # Get probabilities from model (returns numpy arrays)
-        # Shape: [batch_size, output_dim] where output_dim = self._get_output_dim()
         probs, = self._safe_model_call(
             model,
-            method,
+            "infer_variant_ref_sequences_to_labels_probs",
             variant_sequences,
             ref_sequences,
             conditional_input,
