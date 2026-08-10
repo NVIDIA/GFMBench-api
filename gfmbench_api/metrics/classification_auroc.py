@@ -57,7 +57,7 @@ class ClassificationAUROC(BaseMetric):
         for label_idx in range(gt.shape[1]):
             y_true = gt[:, label_idx]
             if np.unique(y_true).size < 2:
-                # AUROC is undefined when the ground truth has no positive samples.
+                # AUROC is undefined when the ground truth contains only one class.
                 continue
 
             label_probs = probs[:, label_idx, :]

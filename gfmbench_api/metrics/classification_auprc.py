@@ -59,9 +59,6 @@ class ClassificationAUPRC(BaseMetric):
             label_probs = probs[:, label_idx, :]
 
             if label_probs.shape[1] == 2:
-                # AUPRC is undefined when the ground truth has no positive samples.
-                if np.count_nonzero(y_true == 1) == 0:
-                    continue
                 # Binary classification: use probabilities of positive class
                 score = average_precision_score(y_true, label_probs[:, 1])
             else:
