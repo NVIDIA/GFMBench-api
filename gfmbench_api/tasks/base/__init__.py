@@ -42,10 +42,7 @@ from gfmbench_api.tasks.base.base_gfm_supervised_task import BaseGFMSupervisedTa
 from gfmbench_api.tasks.base.base_gfm_supervised_classification_task import BaseGFMSupervisedClassificationTask
 from gfmbench_api.tasks.base.base_gfm_supervised_single_seq_task import BaseGFMSupervisedSingleSeqTask
 from gfmbench_api.tasks.base.base_gfm_supervised_variant_effect_task import BaseGFMSupervisedVariantEffectTask
-from gfmbench_api.tasks.base.base_gfm_supervised_regression_task import (
-    BaseGFMSupervisedRegressionTask,
-    OutputSpatiality,
-)
+from gfmbench_api.tasks.base.base_gfm_supervised_regression_task import BaseGFMSupervisedRegressionTask
 
 # Zero-shot task hierarchy
 from gfmbench_api.tasks.base.base_gfm_zero_shot_task import BaseGFMZeroShotTask
@@ -62,7 +59,6 @@ __all__ = [
     "BaseGFMSupervisedSingleSeqTask",
     "BaseGFMSupervisedVariantEffectTask",
     "BaseGFMSupervisedRegressionTask",
-    "OutputSpatiality",
     # Zero-shot task hierarchy
     "BaseGFMZeroShotTask",
     "BaseGFMZeroShotSNVTask",

@@ -25,7 +25,6 @@ from torch.utils.data import Dataset
 
 from gfmbench_api.tasks.base.base_gfm_supervised_regression_task import (
     BaseGFMSupervisedRegressionTask,
-    OutputSpatiality,
 )
 from gfmbench_api.utils.lrb_local import build_cage_examples
 
@@ -52,8 +51,8 @@ class LRBCagePredictionTask(BaseGFMSupervisedRegressionTask):
     def _get_num_labels(self) -> int:
         return getattr(self, "_num_tracks", self.DEFAULT_NUM_TRACKS)
 
-    def _get_output_spatiality(self) -> OutputSpatiality:
-        return OutputSpatiality.BINNED
+    def is_spatial_binned(self) -> bool:
+        return True
 
     def get_task_name(self) -> str:
         return "lrb_cage_prediction"

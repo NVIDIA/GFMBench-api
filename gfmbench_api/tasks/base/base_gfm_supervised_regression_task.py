@@ -15,7 +15,6 @@
 
 # This module does not embed third-party data download URLs.
 from abc import abstractmethod
-from enum import Enum
 from typing import Any, Dict, Optional
 
 import numpy as np
@@ -24,11 +23,6 @@ from tqdm import tqdm
 
 from gfmbench_api.metrics import RegressionPearsonR, RegressionR2
 from gfmbench_api.tasks.base.base_gfm_supervised_task import BaseGFMSupervisedTask
-
-
-class OutputSpatiality(str, Enum):
-    SEQUENCE = "sequence"
-    BINNED = "binned"
 
 
 class BaseGFMSupervisedRegressionTask(BaseGFMSupervisedTask):
@@ -47,7 +41,7 @@ class BaseGFMSupervisedRegressionTask(BaseGFMSupervisedTask):
     all leading dimensions (samples, and bins for binned tasks).
 
     Subclasses must implement:
-        - _get_output_spatiality(): Return 'sequence' or 'binned' output layout
+        - is_spatial_binned(): Return whether the output has a spatial bin dimension
         - _get_num_labels(): Return number of regression outputs per sequence or bin
         - _create_datasets(): Return train, validation, test datasets
         - get_task_name(): Return task name
@@ -57,18 +51,18 @@ class BaseGFMSupervisedRegressionTask(BaseGFMSupervisedTask):
 
     def get_task_attributes(self) -> Dict[str, Any]:
         """Return task attributes for regression tasks."""
-        output_spatiality = self._get_output_spatiality()
-        if not isinstance(output_spatiality, OutputSpatiality):
+        is_spatial_binned = self.is_spatial_binned()
+        if not isinstance(is_spatial_binned, bool):
             raise TypeError(
-                "_get_output_spatiality() must return an OutputSpatiality member, "
-                f"got {output_spatiality!r}"
+                "is_spatial_binned() must return a bool, "
+                f"got {is_spatial_binned!r}"
             )
         return {
             "has_finetuning_data": True,
             "has_validation_data": self.validation_dataset is not None,
             "num_labels": self._validate_num_labels(),
             "task_type": "regression",
-            "output_spatiality": output_spatiality.value,
+            "output_spatiality": "binned" if is_spatial_binned else "sequence",
             "conditional_input_metadata": self.get_conditional_input_meta_data_frame(),
         }
 
@@ -92,8 +86,9 @@ class BaseGFMSupervisedRegressionTask(BaseGFMSupervisedTask):
 
         # Initialize metric classes (both handle sequence-level and binned predictions)
         metrics = [RegressionPearsonR(), RegressionR2()]
-        output_spatiality = self._get_output_spatiality()
-        expected_ndim = 3 if output_spatiality == OutputSpatiality.BINNED else 2
+        is_spatial_binned = self.is_spatial_binned()
+        expected_ndim = 3 if is_spatial_binned else 2
+        output_spatiality = "binned" if is_spatial_binned else "sequence"
 
         for sequences, labels, conditional_input in tqdm(data_loader, desc="Evaluating"):
             # Shape: [batch_size, num_labels] for sequence-level tasks,
@@ -117,7 +112,7 @@ class BaseGFMSupervisedRegressionTask(BaseGFMSupervisedTask):
                 # shape, and the number of labels
                 preds = np.asarray(preds)
                 assert preds.ndim == expected_ndim, (
-                    f"Expected {output_spatiality.value} regression predictions with "
+                    f"Expected {output_spatiality} regression predictions with "
                     f"{expected_ndim} dimensions, but got shape {preds.shape}"
                 )
                 assert preds.shape == labels_np.shape, (
@@ -137,6 +132,6 @@ class BaseGFMSupervisedRegressionTask(BaseGFMSupervisedTask):
         return {metric.name: metric.get_final_results() for metric in metrics}
 
     @abstractmethod
-    def _get_output_spatiality(self) -> OutputSpatiality:
-        """Subclasses must implement this: return the output layout of the task"""
+    def is_spatial_binned(self) -> bool:
+        """Return whether outputs include a spatial bin dimension."""
         pass

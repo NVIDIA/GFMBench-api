@@ -378,8 +378,8 @@ Choose the appropriate base class based on your task:
   single-label classification; multiple labels are independent binary targets.
 
 - **Supervised Regression**: Inherit from `BaseGFMSupervisedRegressionTask`
-  - Implement `_get_output_spatiality()` to return
-    `OutputSpatiality.SEQUENCE` or `OutputSpatiality.BINNED`
+  - Implement `is_spatial_binned()` to return `True` for binned outputs or
+    `False` for sequence-level outputs
   
 - **Zero-Shot SNV Variant Effect**: Inherit from `BaseGFMZeroShotSNVTask`
   - For zero-shot evaluation of single-nucleotide variants (SNVs) with equal-length reference and variant sequences
@@ -409,7 +409,7 @@ Additional methods for supervised classification tasks:
 Additional methods for supervised regression tasks:
 
 5. **`_get_num_labels() -> int`**: Return the number of continuous labels per sequence or bin
-6. **`_get_output_spatiality() -> OutputSpatiality`**: Return the regression output layout
+6. **`is_spatial_binned() -> bool`**: Return whether outputs include a spatial bin dimension
 
 Additional methods for zero-shot tasks:
 
