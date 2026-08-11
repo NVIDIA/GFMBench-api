@@ -185,7 +185,7 @@ if __name__ == "__main__" and "--worker" in sys.argv:
 
 
 # ---------------------------------------------------------------------------
-# Host proxy (imported from sense-env-att / caller environment)
+# Host proxy (imported from the caller / host environment)
 # ---------------------------------------------------------------------------
 
 import logging

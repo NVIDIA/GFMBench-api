@@ -154,6 +154,7 @@ for multi-class multi-label tasks.
 
 - Any not-implemented methods can simply return `None` and metrics depending on them will be skipped.
 - See `gfmbench_api/tasks/base/base_gfm_model.py` for detailed docstrings.
+- Step-by-step tutorial (mock model → NTv3 8M, BEND + GUE): [`usage_examples/add_new_model_tutorial.ipynb`](usage_examples/add_new_model_tutorial.ipynb).
 
 ### Isolated model environments
 
@@ -174,7 +175,7 @@ The first inference call prints a host→worker environment switch so you can co
 
 **Note:** For full fine-tuning, training must run in the same environment and process as the model (weights and autograd cannot cross the host↔worker boundary). Linear probing can keep the backbone isolated and train only the host-side projection layer.
 
-The same adapter pattern works for **compiled runtimes** (e.g. ONNX Runtime, TensorRT): implement the `infer_*` methods, run the session/engine inside the adapter, and return NumPy arrays. GFMBench does not require the backbone to be a live PyTorch module. Full fine-tuning of a compiled graph is usually out of band; linear probing on frozen compiled embeddings still works.
+The same adapter pattern works for **compiled runtimes** (e.g. ONNX Runtime, TensorRT): implement the `infer_*` methods, run the session/engine inside the adapter, and return NumPy arrays. GFMBench-API does not require the backbone to be a live PyTorch module. Full fine-tuning of a compiled graph is usually out of band; linear probing on frozen compiled embeddings still works.
 
 ---
 
@@ -359,6 +360,8 @@ Logs are written to `logs/` for all major steps (run progress, model errors, fin
 
 ### Example: Minimal Custom Pipeline
 
+For a tutorial walkthrough (mock model → NTv3 8M on BEND and GUE), see [`usage_examples/add_new_model_tutorial.ipynb`](usage_examples/add_new_model_tutorial.ipynb).
+
 ```python
 from gfmbench_api.tasks.concrete.gue_promoter_all_task import GuePromoterAllTask
 from gfmbench_api.benchmark_report import BenchmarkReport
@@ -519,6 +522,10 @@ class MyZeroShotTask(BaseGFMZeroShotSNVTask):
         return True  # Set False if references are mostly unique per variant
 ```
 
+
+## Contributing
+
+Contributions to GFMBench-API are welcome. Please open a **pull request** with your suggested changes.
 
 ## NOTICE
 
