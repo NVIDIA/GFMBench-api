@@ -49,6 +49,8 @@ GFMBench-API separates **package dependencies** from **model dependencies**. Mod
 
    `basic_requirements.txt` contains only what the `gfmbench_api` package needs (tasks, metrics, data I/O, etc.) — no model-specific libraries.
 
+   **Note:** If your model’s dependencies conflict with `basic_requirements.txt` (or with other models), you can still keep the benchmark stack in one environment and run **model inference in a separate Python environment and process**. See [`usage_examples/sanity_models/isolated_mock_model.py`](usage_examples/sanity_models/isolated_mock_model.py) and the [Isolated model environments](#isolated-model-environments) section below.
+
 ---
 
 ## What’s Included?
@@ -152,6 +154,27 @@ for multi-class multi-label tasks.
 
 - Any not-implemented methods can simply return `None` and metrics depending on them will be skipped.
 - See `gfmbench_api/tasks/base/base_gfm_model.py` for detailed docstrings.
+
+### Isolated model environments
+
+Tasks, metrics, and data I/O stay in the **host** env (`basic_requirements.txt`). If your model’s packages conflict with that stack, run inference in a **separate Python env and process**: a thin host adapter implements the `infer_*` methods above and forwards each call to a worker subprocess.
+
+See [`usage_examples/sanity_models/isolated_mock_model.py`](usage_examples/sanity_models/isolated_mock_model.py) for a complete example (mock outputs via the worker-only package `randomgen`). The module docstring covers setup, what to change (`DEFAULT_ISOLATED_PYTHON` / `worker_python`), and how to run:
+
+```bash
+python usage_examples/run_benchmark.py \
+  --model IsolatedMock \
+  --linear_prob \
+  --sanity_check_mode \
+  --root_data_dir_path /path/to/data \
+  --csv_path /tmp/isolated_mock.csv
+```
+
+The first inference call prints a host→worker environment switch so you can confirm isolation.
+
+**Note:** For full fine-tuning, training must run in the same environment and process as the model (weights and autograd cannot cross the host↔worker boundary). Linear probing can keep the backbone isolated and train only the host-side projection layer.
+
+The same adapter pattern works for **compiled runtimes** (e.g. ONNX Runtime, TensorRT): implement the `infer_*` methods, run the session/engine inside the adapter, and return NumPy arrays. GFMBench does not require the backbone to be a live PyTorch module. Full fine-tuning of a compiled graph is usually out of band; linear probing on frozen compiled embeddings still works.
 
 ---
 

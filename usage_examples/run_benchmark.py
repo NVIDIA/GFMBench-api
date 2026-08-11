@@ -122,6 +122,11 @@ MODEL_REGISTRY = {
         "max_length": 8192,
         "model_kwargs": {"model_name": "NTv3_100M_pre", "use_autocast": True},
     },
+    "IsolatedMock": {
+        "module": "usage_examples.sanity_models.isolated_mock_model",
+        "class": "IsolatedMockModel",
+        "max_length": 128,
+    },
 }
 
 
