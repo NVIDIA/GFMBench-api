@@ -2,10 +2,35 @@
 
 Test suite for gfmbench-api.
 
-Install dependencies:
+## Specs (install & pytest)
+
+| Spec | Value |
+|------|--------|
+| Python | `>=3.10` (same as the package) |
+| Test runner | `pytest>=8.0` |
+| Coverage (optional) | `pytest-cov` |
+| Test root | `tests/` |
+| Import path | repo root on `PYTHONPATH` (so `gfmbench_api` and `usage_examples` resolve) |
+
+Install the package (editable), then — **for developers who run the pytest suite only** — the test tools:
 
 ```bash
-pip install -e ".[test]"
+pip install -e .
+pip install "pytest>=8.0" pytest-cov
+```
+
+From the **repository root**:
+
+```bash
+pytest tests/
+# or, if imports fail without editable install:
+PYTHONPATH=. pytest tests/
+```
+
+Optional coverage:
+
+```bash
+pytest tests/ --cov=gfmbench_api --cov-report=term-missing
 ```
 
 ## Test files

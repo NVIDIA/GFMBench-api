@@ -122,6 +122,25 @@ MODEL_REGISTRY = {
         "max_length": 8192,
         "model_kwargs": {"model_name": "NTv3_100M_pre", "use_autocast": True},
     },
+    "Caduceus_Ps": {
+        # Lives in Sense.ai (jepa_dna); requires PYTHONPATH to include Sense.ai/algo.
+        "module": "jepa_dna.models.baseline_models.caduceus_model",
+        "class": "CaduceusModel",
+        "max_length": 8192,
+        "model_kwargs": {
+            "model_name": "kuleshov-group/caduceus-ps_seqlen-131k_d_model-256_n_layer-16",
+        },
+    },
+    "HyenaDNA": {
+        # LongSafari HyenaDNA tiny 16k (d_model=128); local GFMBench adapter.
+        # Cap context at 8192 to match other long-seq baselines (Evo2/NTv3/Caduceus).
+        "module": "usage_examples.sanity_models.hyena_dna_model",
+        "class": "HyenaDNAModel",
+        "max_length": 8192,
+        "model_kwargs": {
+            "model_name": "LongSafari/hyenadna-tiny-16k-seqlen-d128-hf",
+        },
+    },
     "IsolatedMock": {
         "module": "usage_examples.sanity_models.isolated_mock_model",
         "class": "IsolatedMockModel",
