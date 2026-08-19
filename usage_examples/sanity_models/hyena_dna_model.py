@@ -29,7 +29,11 @@ from transformers import AutoConfig, AutoModelForCausalLM, AutoTokenizer
 
 
 class HyenaDNAModel(nn.Module):
-    """LongSafari HyenaDNA HF causal LM for GFMBench zero-shot / probing / FT."""
+    """LongSafari HyenaDNA HF causal LM for GFMBench zero-shot / probing / FT.
+
+    Pretrained with causal next-token prediction, so masked-token scoring paths
+    are unsupported and variant effects are scored from next-token probabilities.
+    """
 
     HUGGINGFACE_MODEL_NAME = "LongSafari/hyenadna-tiny-16k-seqlen-d128-hf"
 
@@ -39,7 +43,6 @@ class HyenaDNAModel(nn.Module):
         model_name: Optional[str] = None,
         max_length: int = 8192,
         pretrained: bool = True,
-        jepa_mask_token_id: Optional[int] = None,
     ):
         super().__init__()
         self.device = device
@@ -73,22 +76,10 @@ class HyenaDNAModel(nn.Module):
         self.hidden_dim = int(self.model.config.d_model)
         self._pad_id = int(self.tokenizer.pad_token_id) if self.tokenizer.pad_token_id is not None else 0
 
-        mid = self.tokenizer.mask_token_id
-        unk = self.tokenizer.unk_token_id
-        self.jepa_mask_token_id = int(
-            jepa_mask_token_id
-            if jepa_mask_token_id is not None
-            else (mid if mid is not None else (unk if unk is not None else self._pad_id))
-        )
-
         print(
             f"HyenaDNA loaded. Hidden dim: {self.hidden_dim}, "
-            f"max_length: {self.max_length}, jepa_mask_token_id={self.jepa_mask_token_id}"
+            f"max_length: {self.max_length}"
         )
-
-    def get_original_pretrain_method(self) -> str:
-        """Pretrain objective is causal next-token prediction (not MLM)."""
-        return "NTP"
 
     def _ensure_attention_mask(self, encoded: dict) -> dict:
         if "attention_mask" in encoded and encoded["attention_mask"] is not None:
@@ -334,8 +325,7 @@ class HyenaDNAModel(nn.Module):
         # Causal LM: masked MLM metrics are not supported (use sum_probs_llr instead).
         return None, None
 
-    def load_checkpoint(self, checkpoint_path: str, load_mlm_head: bool = True) -> None:
-        del load_mlm_head
+    def load_checkpoint(self, checkpoint_path: str) -> None:
         print(f"Loading checkpoint from: {checkpoint_path}")
         state = torch.load(checkpoint_path, map_location=self.device)
         if isinstance(state, dict) and "model_state_dict" in state:
