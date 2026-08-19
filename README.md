@@ -49,6 +49,8 @@ GFMBench-API separates **package dependencies** from **model dependencies**. Mod
 
    `basic_requirements.txt` contains only what the `gfmbench_api` package needs (tasks, metrics, data I/O, etc.) — no model-specific libraries.
 
+   **Note:** If your model’s dependencies conflict with `basic_requirements.txt` (or with other models), you can still keep the benchmark stack in one environment and run **model inference in a separate Python environment and process**. See [`usage_examples/sanity_models/isolated_mock_model.py`](usage_examples/sanity_models/isolated_mock_model.py) and the [Isolated model environments](#isolated-model-environments) section below.
+
 ---
 
 ## What’s Included?
@@ -85,7 +87,7 @@ gfmbench_api_rep/
 
 ## Supported Benchmarks & Tasks
 
-GFMBench-API supports evaluation on **20 unique tasks**, grouped as:
+GFMBench-API supports evaluation on **22 unique tasks**, grouped as:
 
 ### Supervised Classification & Variant Prediction
 
@@ -101,6 +103,8 @@ GFMBench-API supports evaluation on **20 unique tasks**, grouped as:
 | VariantBenchmarksMEQTLTask           | Binary classification of variants affecting DNA methylation rates. |
 | VariantBenchmarksSQTLTask            | Binary classification of variants affecting alternative splicing. |
 | LRBCausalEqtlTask                    | Binary classification of variants causally influencing gene expression with tissue context. |
+| LRBEnhancerTask                      | Binary classification of genomic bins overlapping annotated enhancer cis-regulatory elements. |
+| LRBHistoneMarksTask                  | Multi-label classification of genomic bins across 20 histone-mark tracks. |
 
 ### Zero-Shot Variant Effect Prediction
 
@@ -152,6 +156,28 @@ for multi-class multi-label tasks.
 
 - Any not-implemented methods can simply return `None` and metrics depending on them will be skipped.
 - See `gfmbench_api/tasks/base/base_gfm_model.py` for detailed docstrings.
+- Step-by-step tutorial (mock model → NTv3 8M, BEND + GUE): [`usage_examples/add_new_model_tutorial.ipynb`](usage_examples/add_new_model_tutorial.ipynb).
+
+### Isolated model environments
+
+Tasks, metrics, and data I/O stay in the **host** env (`basic_requirements.txt`). If your model’s packages conflict with that stack, run inference in a **separate Python env and process**: a thin host adapter implements the `infer_*` methods above and forwards each call to a worker subprocess.
+
+See [`usage_examples/sanity_models/isolated_mock_model.py`](usage_examples/sanity_models/isolated_mock_model.py) for a complete example (mock outputs via the worker-only package `randomgen`). The module docstring covers setup, what to change (`DEFAULT_ISOLATED_PYTHON` / `worker_python`), and how to run:
+
+```bash
+python usage_examples/run_benchmark.py \
+  --model IsolatedMock \
+  --linear_prob \
+  --sanity_check_mode \
+  --root_data_dir_path /path/to/data \
+  --csv_path /tmp/isolated_mock.csv
+```
+
+The first inference call prints a host→worker environment switch so you can confirm isolation.
+
+**Note:** For full fine-tuning, training must run in the same environment and process as the model (weights and autograd cannot cross the host↔worker boundary). Linear probing can keep the backbone isolated and train only the host-side projection layer.
+
+The same adapter pattern works for **compiled runtimes** (e.g. ONNX Runtime, TensorRT): implement the `infer_*` methods, run the session/engine inside the adapter, and return NumPy arrays. GFMBench-API does not require the backbone to be a live PyTorch module. Full fine-tuning of a compiled graph is usually out of band; linear probing on frozen compiled embeddings still works.
 
 ---
 
@@ -336,6 +362,8 @@ Logs are written to `logs/` for all major steps (run progress, model errors, fin
 
 ### Example: Minimal Custom Pipeline
 
+For a tutorial walkthrough (mock model → NTv3 8M on BEND and GUE), see [`usage_examples/add_new_model_tutorial.ipynb`](usage_examples/add_new_model_tutorial.ipynb).
+
 ```python
 from gfmbench_api.tasks.concrete.gue_promoter_all_task import GuePromoterAllTask
 from gfmbench_api.benchmark_report import BenchmarkReport
@@ -496,6 +524,10 @@ class MyZeroShotTask(BaseGFMZeroShotSNVTask):
         return True  # Set False if references are mostly unique per variant
 ```
 
+
+## Contributing
+
+Contributions to GFMBench-API are welcome. Please open a **pull request** with your suggested changes.
 
 ## NOTICE
 

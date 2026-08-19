@@ -291,8 +291,12 @@ class VepevalClinvarTask(BaseGFMZeroShotSNVTask):
             )
 
     def _get_variant_position_in_sequence(self) -> int:
-        """Return the position of the SNV in the sequence."""
-        return self.max_sequence_length // 2
+        """Return the position of the SNV in the sequence.
+
+        Must match the centering used by `extract_snv_sequences_centered`,
+        which places the variant at `(max_sequence_length - 1) // 2`.
+        """
+        return (self.max_sequence_length - 1) // 2
 
     def _get_default_max_seq_len(self) -> int:
         """Return task's default maximum sequence length (1048576bp)."""

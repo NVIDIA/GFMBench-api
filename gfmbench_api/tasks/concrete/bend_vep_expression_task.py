@@ -14,7 +14,8 @@
 # limitations under the License.
 
 # Third-party URL notices for this file (Python packages: THIRD_PARTY_NOTICES.md):
-# - https://sid.erda.dk/share_redirect/aNQa0Oz2lY/data/variant_effects/variant_effects_expression.bed — BSD-3-Clause
+# - https://github.com/frederikkemarin/BEND — BSD-3-Clause; source benchmark for variant_effects_expression.bed,
+#   which BEND distributes via https://sid.erda.dk/share_redirect/aNQa0Oz2lY/data/variant_effects/
 # - https://hgdownload.soe.ucsc.edu/goldenPath/hg38/bigZips/hg38.fa.gz — LicenseRef-UCSC-Genome-Browser
 import logging
 import os
@@ -47,7 +48,7 @@ class BendVEPExpression(BaseGFMZeroShotSNVTask):
             root_data_dir_path: path to root data directory
             task_config: optional configuration dictionary with user's settings
         """
-        # Data source URL (BEND repository)
+        # Data source URL (BEND ERDA data share, linked from the BEND README)
         self.data_source_url = "https://sid.erda.dk/share_redirect/aNQa0Oz2lY/data/variant_effects/variant_effects_expression.bed"
         
         # Set reference genome path before super().__init__ (needed for _create_datasets)
