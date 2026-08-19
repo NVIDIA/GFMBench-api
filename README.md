@@ -87,7 +87,7 @@ gfmbench_api_rep/
 
 ## Supported Benchmarks & Tasks
 
-GFMBench-API supports evaluation on **20 unique tasks**, grouped as:
+GFMBench-API supports evaluation on **22 unique tasks**, grouped as:
 
 ### Supervised Classification & Variant Prediction
 
@@ -103,6 +103,8 @@ GFMBench-API supports evaluation on **20 unique tasks**, grouped as:
 | VariantBenchmarksMEQTLTask           | Binary classification of variants affecting DNA methylation rates. |
 | VariantBenchmarksSQTLTask            | Binary classification of variants affecting alternative splicing. |
 | LRBCausalEqtlTask                    | Binary classification of variants causally influencing gene expression with tissue context. |
+| LRBEnhancerTask                      | Binary classification of genomic bins overlapping annotated enhancer cis-regulatory elements. |
+| LRBHistoneMarksTask                  | Multi-label classification of genomic bins across 20 histone-mark tracks. |
 
 ### Zero-Shot Variant Effect Prediction
 

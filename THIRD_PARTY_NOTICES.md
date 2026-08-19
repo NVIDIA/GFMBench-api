@@ -94,13 +94,11 @@ This document lists third-party open source software, models, datasets, and data
 | C. elegans ce11 | https://hgdownload.soe.ucsc.edu/goldenPath/ce11/bigZips/ce11.fa.gz | LicenseRef-UCSC-Genome-Browser |
 | Arabidopsis TAIR10 | https://ftp.ensemblgenomes.ebi.ac.uk/pub/plants/release-57/fasta/arabidopsis_thaliana/dna/Arabidopsis_thaliana.TAIR10.dna.toplevel.fa.gz | LicenseRef-Ensembl-Data |
 | ClinVar variant summary | https://ftp.ncbi.nlm.nih.gov/pub/clinvar/tab_delimited/archive/variant_summary_2026-01.txt.gz | LicenseRef-NCBI-Data |
-| Supplementary media (BEND VEP) | https://www.biorxiv.org/content/biorxiv/early/2025/09/10/2025.09.05.674459/DC1/embed/media-1.zip?download=true | CC-BY-NC-ND-4.0 |
-| Variant effects expression BED | https://sid.erda.dk/share_redirect/aNQa0Oz2lY/data/variant_effects/variant_effects_expression.bed | BSD-3-Clause |
-| Variant effects disease BED | https://sid.erda.dk/share_redirect/aNQa0Oz2lY/data/variant_effects/variant_effects_disease.bed | BSD-3-Clause |
+| Supplementary media (VEP-eval ClinVar) | https://www.biorxiv.org/content/biorxiv/early/2025/09/10/2025.09.05.674459/DC1/embed/media-1.zip?download=true | CC-BY-NC-ND-4.0 |
+| BEND — variant effects expression BED | https://github.com/frederikkemarin/BEND | BSD-3-Clause |
+| BEND — variant effects disease BED | https://github.com/frederikkemarin/BEND | BSD-3-Clause |
 | BRCA1 supplementary XLSX | https://github.com/ArcInstitute/evo2/raw/refs/heads/main/notebooks/brca1/41586_2018_461_MOESM3_ESM.xlsx | Apache-2.0 |
 | BRCA1 GRCh37 chr17 FASTA | https://github.com/ArcInstitute/evo2/raw/refs/heads/main/notebooks/brca1/GRCh37.p13_chr17.fna.gz | Apache-2.0 |
-
----
 
 ## LicenseRef notes
 
