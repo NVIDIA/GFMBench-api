@@ -66,7 +66,7 @@ Parametrized over all tasks in `TASK_REGISTRY` except `vepeval_clinvar`, plus on
 
 ### Heavy (`tests/e2e/test_heavy.py`)
 
-Two tests sharing the same DNABERT2 sanity config (all tasks in `TASK_REGISTRY`, 100 samples each, linear probe, 1 epoch):
+Two tests sharing the same DNABERT2 sanity config (all non-excluded tasks in `TASK_REGISTRY`, up to 100 diversity-preserving samples per split, linear probe, 3 epochs):
 
 | Test | Purpose |
 |------|---------|

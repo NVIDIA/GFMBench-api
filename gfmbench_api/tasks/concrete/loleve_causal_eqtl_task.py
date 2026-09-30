@@ -31,6 +31,7 @@ from datasets import Dataset as HFDataset
 from gfmbench_api.tasks.base.base_gfm_zeroshot_general_indel_task import (
     BaseGFMZeroShotGeneralIndelTask,
 )
+from gfmbench_api.utils.sampling_utils import diverse_sample_indices
 
 # -------------------------
 # Constants
@@ -238,10 +239,10 @@ class _LOL_EVECausalEqtlDataset(Dataset):
 
         # 5) Deterministic max_num_samples
         if cfg.max_num_samples is not None:
-            n = int(cfg.max_num_samples)
-            wt_out = wt_out[:n]
-            var_out = var_out[:n]
-            labels = labels[:n]
+            indices = diverse_sample_indices(labels, int(cfg.max_num_samples))
+            wt_out = [wt_out[index] for index in indices]
+            var_out = [var_out[index] for index in indices]
+            labels = labels[indices]
 
 
         self._wt = wt_out

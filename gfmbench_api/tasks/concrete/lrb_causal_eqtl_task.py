@@ -32,6 +32,7 @@ from typing import Any, Tuple, Optional, Dict, List
 from gfmbench_api.tasks.base.base_gfm_supervised_variant_effect_task import BaseGFMSupervisedVariantEffectTask
 from gfmbench_api.utils.fileutils import ensure_hf_hub_file, ensure_reference_genome
 from gfmbench_api.utils.preprocutils import standardize_sequence, pad_sequence_centered_variant
+from gfmbench_api.utils.sampling_utils import diverse_sample_dataframe
 
 
 class _LRBCausalEqtlDataset(Dataset):
@@ -128,8 +129,12 @@ class LRBCausalEqtlTask(BaseGFMSupervisedVariantEffectTask):
         test_df = df[test_mask].reset_index(drop=True)
 
         if self.max_num_samples is not None:
-            train_df = train_df.head(self.max_num_samples)
-            test_df = test_df.head(self.max_num_samples)
+            train_df = diverse_sample_dataframe(
+                train_df, train_df["label"], self.max_num_samples
+            )
+            test_df = diverse_sample_dataframe(
+                test_df, test_df["label"], self.max_num_samples
+            )
         
         # 5. Genome
         genome_path = os.path.join(genome_dir, "hg38.fa")

@@ -27,6 +27,7 @@ from pyfaidx import Fasta
 
 from gfmbench_api.utils.fileutils import ensure_hf_hub_file, ensure_reference_genome
 from gfmbench_api.utils.preprocutils import standardize_sequence, pad_sequence_centered_variant
+from gfmbench_api.utils.sampling_utils import diverse_sample_dataframe
 from gfmbench_api.tasks.base.base_gfm_zeroshot_snv_task import BaseGFMZeroShotSNVTask
 
 
@@ -157,23 +158,24 @@ class LrbVariantEffectPathogenicOmimTask(BaseGFMZeroShotSNVTask):
         logging.info(f"[Task] Using Variants File: {variants_path}")
         df = pd.read_csv(variants_path)
 
-        # Max Num Samples implementation
-        max_samples = cfg.get("max_num_samples")
-        if max_samples is not None:
-            if len(df) > max_samples:
-                logging.info(f"[Task] Applying max_num_samples limit: {max_samples} (Randomly sampled)")
-                # shuffle first to avoid getting only Positives (since file is sorted)
-                df = df.sample(frac=1, random_state=42).reset_index(drop=True)
-                df = df.head(max_samples)
-
         # Initialize Dataset 
         context_len = cfg.get("max_sequence_length", self._get_default_max_seq_len())
         self.max_sequence_length = context_len 
         
         logging.info(f"[Task] Loading Genome: {self.reference_genome_path}")
         fasta = Fasta(str(self.reference_genome_path), one_based_attributes=False)
-        
-        return _PathogenicOmimDataset(df, fasta, context_len)
+        dataset = _PathogenicOmimDataset(df, fasta, context_len)
+
+        max_samples = cfg.get("max_num_samples")
+        if max_samples is not None and len(dataset.df) > max_samples:
+            logging.info(
+                f"[Task] Applying label-diverse max_num_samples limit: {max_samples}"
+            )
+            dataset.df = diverse_sample_dataframe(
+                dataset.df, dataset.df["INT_LABEL"], max_samples
+            )
+
+        return dataset
 
     def get_conditional_input_meta_data_frame(self) -> Optional[pd.DataFrame]:
         """Return None as this task has no conditional metadata inputs."""

@@ -31,18 +31,65 @@ from pathlib import Path
 import pandas as pd
 import pytest
 
+from gfmbench_api.tasks.base.base_gfm_supervised_classification_task import (
+    BaseGFMSupervisedClassificationTask,
+)
+from gfmbench_api.tasks.base.base_gfm_zero_shot_task import BaseGFMZeroShotTask
+from gfmbench_api.tasks.base.base_gfm_zeroshot_snv_task import (
+    BaseGFMZeroShotSNVTask,
+)
 from tests.e2e.baseline_utils import (
     compare_to_baseline,
     format_failures,
     load_baseline,
     load_results,
 )
+from usage_examples.run_benchmark import TASK_REGISTRY
 from usage_examples.run_benchmark import main as run_benchmark_main
 
 DEFAULT_HEAVY_MODEL = "DNABERT2"
 DEFAULT_ATOL = 0.005
 
 EXCLUDED_HEAVY_TASKS = frozenset({"vepeval_clinvar"})
+
+
+def _expected_auroc_metrics(task_cls: type) -> set[str]:
+    if issubclass(task_cls, BaseGFMSupervisedClassificationTask):
+        return {"classification_auroc"}
+    if issubclass(task_cls, BaseGFMZeroShotTask):
+        metrics = {
+            "sequence_embeddings_cosinesim_auroc",
+            "sequence_embeddings_l2_auroc",
+        }
+        if issubclass(task_cls, BaseGFMZeroShotSNVTask):
+            metrics.update({
+                "snv_variant_effect_cosinesim_auroc",
+                "snv_variant_effect_prediction_masked_llr_auroc",
+            })
+        return metrics
+    return set()
+
+
+def _assert_all_auroc_metrics_are_finite(results_df: pd.DataFrame) -> None:
+    finite_results = results_df.copy()
+    finite_results["actual"] = pd.to_numeric(
+        finite_results["actual"], errors="coerce"
+    )
+    finite_results = finite_results[finite_results["actual"].notna()]
+    finite_keys = set(zip(finite_results["task"], finite_results["metric"]))
+
+    missing = []
+    for task_name, task_cls in TASK_REGISTRY.items():
+        if task_name in EXCLUDED_HEAVY_TASKS:
+            continue
+        for metric in _expected_auroc_metrics(task_cls):
+            if (task_name, metric) not in finite_keys:
+                missing.append(f"{task_name} / {metric}")
+
+    assert not missing, (
+        "Sanity sampling did not produce finite AUROC metrics:\n  "
+        + "\n  ".join(sorted(missing))
+    )
 
 
 def _baseline_path(model_name: str) -> Path:
@@ -140,6 +187,7 @@ def test_heavy_sanity_regression(heavy_data_root, tmp_path):
         )
 
     results_df = _run_heavy_benchmark(heavy_data_root, csv_path)
+    _assert_all_auroc_metrics_are_finite(results_df)
     baseline_df = load_baseline(baseline_path)
     failures, warnings = compare_to_baseline(
         results_df,

@@ -23,6 +23,7 @@ import torch
 from gfmbench_api.tasks.base.base_gfm_zeroshot_snv_task import BaseGFMZeroShotSNVTask
 from gfmbench_api.utils.fileutils import download_file_from_url
 from gfmbench_api.utils.preprocutils import pad_sequence_centered_variant
+from gfmbench_api.utils.sampling_utils import diverse_sample_dataframe
 import glob
 import json
 import subprocess
@@ -106,6 +107,7 @@ class BRCA1Task(BaseGFMZeroShotSNVTask):
         
         # Ensure chrom is "chr17"
         df['chrom'] = df['chrom'].astype(str).apply(lambda c: f"chr{c}" if not str(c).startswith('chr') else c)
+        df = diverse_sample_dataframe(df, df["label"], self.max_num_samples)
         
         print(f"Extracting sequences (window size: {self.max_sequence_length}bp)...")
         reference_sequences = []
@@ -115,10 +117,6 @@ class BRCA1Task(BaseGFMZeroShotSNVTask):
         positions = []
         
         for idx, row in df.iterrows():
-            if self.max_num_samples is not None and len(reference_sequences) >= self.max_num_samples:
-                print(f"[Fast run] Using only first {self.max_num_samples} samples.")
-                break
-                
             chrom = str(row['chrom'])
             
             # --- CHANGE 2: Fix Indexing Bug ---

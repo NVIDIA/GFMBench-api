@@ -28,6 +28,7 @@ from gfmbench_api.tasks.base.base_gfm_zeroshot_snv_task import BaseGFMZeroShotSN
 import numpy as np
 from gfmbench_api.utils.fileutils import download_file_from_url, ensure_reference_genome
 from gfmbench_api.utils.preprocutils import pad_sequence_centered_variant
+from gfmbench_api.utils.sampling_utils import diverse_sample_dataframe
 
 
 class BendVEPDisease(BaseGFMZeroShotSNVTask):
@@ -108,7 +109,7 @@ class BendVEPDisease(BaseGFMZeroShotSNVTask):
         
         # Limit samples if max_num_samples is specified
         if self.max_num_samples is not None:
-            df = df.head(min(self.max_num_samples, len(df)))
+            df = diverse_sample_dataframe(df, df["label"], self.max_num_samples)
         
         # Extract sequences from reference genome
         logging.info(f"Extracting sequences (window size: {self.max_sequence_length}bp)...")
