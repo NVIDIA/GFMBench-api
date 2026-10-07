@@ -43,6 +43,7 @@ from pyfaidx import Fasta
 
 from gfmbench_api.utils.fileutils import download_file_from_url
 from gfmbench_api.utils.preprocutils import standardize_sequence
+from gfmbench_api.utils.sampling_utils import diverse_sample_indices
 
 LRB_HF_REPO_ID = "InstaDeepAI/genomics-long-range-benchmark"
 
@@ -142,17 +143,13 @@ def _rows_to_examples(
 ) -> List[Example]:
     """Shared split->examples loop for the single-position supervised LRB tasks.
 
-    Selects the ``split`` rows (shuffling before any ``n`` truncation, since the
-    CSVs are grouped by label and a plain ``head()`` would yield a degenerate
-    single-class subset), pads each region to ``seq_len`` bp, and builds
-    ``(sequence, label, conditional_input)`` tuples. ``label_fn(row)`` extracts
-    the per-task label; ``end_col=None`` pads symmetrically around a single
-    position (chromatin 200bp bins) rather than around a ``[start, end)`` span
-    (regulatory elements).
+    Selects the ``split`` rows, builds valid examples, then applies
+    diversity-preserving limiting so invalid genomic windows cannot remove the
+    only examples of a class. ``label_fn(row)`` extracts the per-task label;
+    ``end_col=None`` pads symmetrically around a single position (chromatin
+    200bp bins) rather than around a ``[start, end)`` span (regulatory elements).
     """
     sub = df[df["split"] == split]
-    if n is not None:
-        sub = sub.sample(frac=1.0, random_state=0).head(n)
     examples: List[Example] = []
     for _, row in sub.iterrows():
         chrom = _get_chromosome(genome, row["CHROM"])
@@ -163,6 +160,11 @@ def _rows_to_examples(
         if not seq:
             continue
         examples.append((standardize_sequence(seq), label_fn(row), _EMPTY_COND))
+    if n is not None and len(examples) > n:
+        indices = diverse_sample_indices(
+            [example[1] for example in examples], n
+        )
+        examples = [examples[index] for index in indices]
     return examples
 
 

@@ -38,6 +38,7 @@ pytest tests/ --cov=gfmbench_api --cov-report=term-missing
 | File | What it checks | Network | GPU |
 |------|----------------|---------|-----|
 | `tests/unit/test_caching_utils.py` | `SequenceInferenceCache` semantics — cache hits/misses, dedup, disable, clear, size limits, output type fidelity, key correctness, variable-length padding | No | No |
+| `tests/unit/test_sampling_utils.py` | Deterministic stratified sampling, scalar and multitarget coverage, infeasible limits, validation, and dataframe no-op behavior | No | No |
 | `tests/e2e/test_smoke.py` | Full eval pipeline with `MockGFMModel` and local fixture CSVs | No | No |
 | `tests/e2e/test_download.py` | Tasks download data into an empty temp directory | Yes | No |
 | `tests/e2e/test_heavy.py` | Real DNABERT2 benchmark on all tasks (sanity mode); scores compared to pinned baseline CSV | Yes | Recommended |
@@ -66,7 +67,7 @@ Parametrized over all tasks in `TASK_REGISTRY` except `vepeval_clinvar`, plus on
 
 ### Heavy (`tests/e2e/test_heavy.py`)
 
-Two tests sharing the same DNABERT2 sanity config (all tasks in `TASK_REGISTRY`, 100 samples each, linear probe, 1 epoch):
+Two tests sharing the same DNABERT2 sanity config (all non-excluded tasks in `TASK_REGISTRY`, up to 100 diversity-preserving samples per split, linear probe, 3 epochs):
 
 | Test | Purpose |
 |------|---------|

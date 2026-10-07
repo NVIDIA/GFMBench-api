@@ -47,6 +47,7 @@ from torch.utils.data import Dataset
 from gfmbench_api.tasks.base.base_gfm_zeroshot_snv_task import BaseGFMZeroShotSNVTask
 from gfmbench_api.utils.fileutils import ensure_reference_genome
 from gfmbench_api.utils.preprocutils import pad_sequence_centered_variant
+from gfmbench_api.utils.sampling_utils import diverse_sample_dataframe
 
 
 def _load_traitgym_dataset(
@@ -183,7 +184,7 @@ class TraitGymMendelianTask(BaseGFMZeroShotSNVTask):
         
         # Limit samples if max_num_samples is specified (follows BendVEPDisease pattern)
         if self.max_num_samples is not None:
-            df = df.head(min(self.max_num_samples, len(df)))
+            df = diverse_sample_dataframe(df, df["label"], self.max_num_samples)
             logging.info(f"Limiting to {len(df)} samples (max_num_samples={self.max_num_samples})")
         
         # Check reference genome exists

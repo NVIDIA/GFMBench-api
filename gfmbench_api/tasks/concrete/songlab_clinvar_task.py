@@ -30,6 +30,7 @@ from torch.utils.data import Dataset
 from gfmbench_api.tasks.base.base_gfm_zeroshot_snv_task import BaseGFMZeroShotSNVTask
 from gfmbench_api.utils.fileutils import ensure_reference_genome
 from gfmbench_api.utils.preprocutils import pad_sequence_centered_variant
+from gfmbench_api.utils.sampling_utils import diverse_sample_dataframe
 
 
 class SonglabClinvarTask(BaseGFMZeroShotSNVTask):
@@ -120,8 +121,7 @@ class SonglabClinvarTask(BaseGFMZeroShotSNVTask):
         logging.info(f"Loaded {len(df)} samples from ClinVar dataset")
         # --- OPTIMIZATION: Slice early to save processing time if using subset ---
         if self.max_num_samples is not None:
-            logging.info(f"[Fast run] Slicing dataframe to first {self.max_num_samples} SNVs before extraction.")
-            df: pd.DataFrame = df.head(self.max_num_samples)
+            df = diverse_sample_dataframe(df, df["label"], self.max_num_samples)
 
         # Required columns
         required_columns = ["chrom", "pos", "ref", "alt", "label"]

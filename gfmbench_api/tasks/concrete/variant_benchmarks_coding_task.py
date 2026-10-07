@@ -27,6 +27,7 @@ from gfmbench_api.tasks.base.base_gfm_supervised_variant_effect_task import Base
 import numpy as np
 from gfmbench_api.utils.fileutils import download_hf_dataset_files
 from gfmbench_api.utils.preprocutils import build_forward_centered_seqs
+from gfmbench_api.utils.sampling_utils import diverse_sample_dataframe
 
 #BioFM based chromosome splits for cross-validation
 FOLD_SPLIT = {
@@ -126,8 +127,12 @@ class VariantBenchmarksCodingTask(BaseGFMSupervisedVariantEffectTask):
         
         # Limit samples if max_num_samples is specified
         if self.max_num_samples is not None:
-            train_df = train_df.head(min(self.max_num_samples, len(train_df)))
-            test_df = test_df.head(min(self.max_num_samples, len(test_df)))
+            train_df = diverse_sample_dataframe(
+                train_df, train_df["label"], self.max_num_samples
+            )
+            test_df = diverse_sample_dataframe(
+                test_df, test_df["label"], self.max_num_samples
+            )
 
 
         # Create dataset: (variant_sequence, reference_sequence, label, conditional_input) tuples

@@ -27,6 +27,7 @@ from gfmbench_api.tasks.base.base_gfm_supervised_single_seq_task import BaseGFMS
 import numpy as np
 from gfmbench_api.utils.fileutils import download_hf_dataset_files
 from gfmbench_api.utils.preprocutils import truncate_sequence_from_ends
+from gfmbench_api.utils.sampling_utils import diverse_sample_dataframe
 
 class GueTranscriptionFactorTask(BaseGFMSupervisedSingleSeqTask):
     """GUE Transcription Factor prediction task (binary classification)."""
@@ -80,9 +81,15 @@ class GueTranscriptionFactorTask(BaseGFMSupervisedSingleSeqTask):
         
         # Limit samples if max_num_samples is specified
         if self.max_num_samples is not None:
-            train_df = train_df.head(min(self.max_num_samples, len(train_df)))
-            val_df = val_df.head(min(self.max_num_samples, len(val_df)))
-            test_df = test_df.head(min(self.max_num_samples, len(test_df)))
+            train_df = diverse_sample_dataframe(
+                train_df, train_df["label"], self.max_num_samples
+            )
+            val_df = diverse_sample_dataframe(
+                val_df, val_df["label"], self.max_num_samples
+            )
+            test_df = diverse_sample_dataframe(
+                test_df, test_df["label"], self.max_num_samples
+            )
 
         # Keep sequences as strings; model handles tokenization
         # Truncate from ends if needed (preserving center), using self.max_sequence_length

@@ -34,6 +34,7 @@ import torch
 from gfmbench_api.tasks.base.base_gfm_zeroshot_general_indel_task import BaseGFMZeroShotGeneralIndelTask
 from gfmbench_api.utils.fileutils import ensure_reference_genome
 from gfmbench_api.utils.preprocutils import pad_sequence_centered_variant
+from gfmbench_api.utils.sampling_utils import diverse_sample_dataframe
 
 # ClinVar annotation mappings
 REVIEW_STATUS_TO_GOLD_STARS = {
@@ -395,8 +396,8 @@ class IndelClinvarTask(BaseGFMZeroShotGeneralIndelTask):
 
         # Early slice for fast testing
         if self.max_num_samples is not None:
-            df = df.iloc[:self.max_num_samples]
-            logging.info(f"[Fast run] Using first {len(df)} variants")
+            df = diverse_sample_dataframe(df, df["label"], self.max_num_samples)
+            logging.info(f"[Fast run] Using {len(df)} label-diverse variants")
 
         # Load reference genome
         logging.info("Loading reference genome...")

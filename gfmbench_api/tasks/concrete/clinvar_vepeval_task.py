@@ -27,6 +27,7 @@ import torch
 from gfmbench_api.tasks.base.base_gfm_zeroshot_snv_task import BaseGFMZeroShotSNVTask
 from gfmbench_api.utils.fileutils import download_file_from_url, ensure_reference_genome
 from gfmbench_api.utils.preprocutils import extract_snv_sequences_centered
+from gfmbench_api.utils.sampling_utils import diverse_sample_dataframe
 
 class VepevalClinvarTask(BaseGFMZeroShotSNVTask):
     """
@@ -122,8 +123,7 @@ class VepevalClinvarTask(BaseGFMZeroShotSNVTask):
 
         # Apply max_num_samples if specified (early slice for efficiency)
         if self.max_num_samples is not None:
-            df = df.iloc[: self.max_num_samples]
-            print(f"[Fast run] Using first {len(df)} SNVs (max_num_samples={self.max_num_samples}).")
+            df = diverse_sample_dataframe(df, df["label"], self.max_num_samples)
 
         # Load reference genome
         print(f"Loading reference genome: {self.reference_genome_path}")
