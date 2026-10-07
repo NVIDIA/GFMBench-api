@@ -28,6 +28,7 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
+import numpy as np
 import pandas as pd
 import pytest
 
@@ -75,7 +76,9 @@ def _assert_all_auroc_metrics_are_finite(results_df: pd.DataFrame) -> None:
     finite_results["actual"] = pd.to_numeric(
         finite_results["actual"], errors="coerce"
     )
-    finite_results = finite_results[finite_results["actual"].notna()]
+    finite_results = finite_results[
+        np.isfinite(finite_results["actual"].to_numpy(dtype=float))
+    ]
     finite_keys = set(zip(finite_results["task"], finite_results["metric"]))
 
     missing = []

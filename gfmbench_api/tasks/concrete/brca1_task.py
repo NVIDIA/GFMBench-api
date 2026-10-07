@@ -107,7 +107,8 @@ class BRCA1Task(BaseGFMZeroShotSNVTask):
         
         # Ensure chrom is "chr17"
         df['chrom'] = df['chrom'].astype(str).apply(lambda c: f"chr{c}" if not str(c).startswith('chr') else c)
-        df = diverse_sample_dataframe(df, df["label"], self.max_num_samples)
+        if self.max_num_samples is not None:
+            df = diverse_sample_dataframe(df, df["label"], self.max_num_samples)
         
         print(f"Extracting sequences (window size: {self.max_sequence_length}bp)...")
         reference_sequences = []

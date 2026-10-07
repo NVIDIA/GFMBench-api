@@ -121,9 +121,6 @@ class SonglabClinvarTask(BaseGFMZeroShotSNVTask):
         logging.info(f"Loaded {len(df)} samples from ClinVar dataset")
         # --- OPTIMIZATION: Slice early to save processing time if using subset ---
         if self.max_num_samples is not None:
-            logging.info(
-                f"[Fast run] Sampling {self.max_num_samples} label-diverse SNVs before extraction."
-            )
             df = diverse_sample_dataframe(df, df["label"], self.max_num_samples)
 
         # Required columns

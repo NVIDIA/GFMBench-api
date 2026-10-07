@@ -1,7 +1,7 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""Deterministic sample limiting that preserves label diversity."""
+"""Deterministic, stratified sample limiting that preserves label diversity."""
 
 from __future__ import annotations
 
@@ -21,8 +21,10 @@ def diverse_sample_indices(
     """Select at most ``max_samples`` rows while retaining observed label values.
 
     Scalar labels are treated as single-label classification. Vector labels are
-    treated as multilabel targets; the selection attempts to retain
-    ``min_per_class`` rows for every observed value of every target.
+    treated as multiple targets. For every observed value of every target, the
+    selection guarantees ``min(min_per_class, available_rows)`` rows, or raises
+    ``ValueError`` when that coverage cannot fit in ``max_samples``. Remaining
+    capacity is filled toward proportional per-target class quotas.
     """
     if max_samples <= 0:
         raise ValueError("max_samples must be positive")
@@ -41,56 +43,87 @@ def diverse_sample_indices(
         return np.arange(num_rows, dtype=np.int64)
 
     label_matrix = np.stack(label_rows)
-    requirements: dict[tuple[int, object], int] = {}
-    row_features: list[set[tuple[int, object]]] = []
-    for row in label_matrix:
-        features = {
-            (target_idx, value.item() if hasattr(value, "item") else value)
-            for target_idx, value in enumerate(row)
-        }
-        row_features.append(features)
-
+    encoded_targets: list[np.ndarray] = []
+    class_counts: list[np.ndarray] = []
+    minimum_requirements: list[np.ndarray] = []
+    stratified_quotas: list[np.ndarray] = []
     for target_idx in range(label_matrix.shape[1]):
-        values, counts = np.unique(label_matrix[:, target_idx], return_counts=True)
-        for value, count in zip(values, counts):
-            key = (target_idx, value.item() if hasattr(value, "item") else value)
-            requirements[key] = min(min_per_class, int(count))
+        _, encoded, counts = np.unique(
+            label_matrix[:, target_idx],
+            return_inverse=True,
+            return_counts=True,
+        )
+        minimum = np.minimum(counts, min_per_class).astype(np.int64)
+        if int(minimum.sum()) > max_samples:
+            raise ValueError(
+                "max_samples is too small to retain the requested "
+                f"min_per_class coverage for target {target_idx}: "
+                f"need at least {int(minimum.sum())}, got {max_samples}"
+            )
 
+        quota = minimum.copy()
+        desired = max_samples * counts / num_rows
+        for _ in range(max_samples - int(quota.sum())):
+            available = quota < counts
+            deficits = desired - quota
+            deficits[~available] = -np.inf
+            quota[int(np.argmax(deficits))] += 1
+
+        encoded_targets.append(encoded)
+        class_counts.append(counts)
+        minimum_requirements.append(minimum)
+        stratified_quotas.append(quota)
+
+    encoded_matrix = np.column_stack(encoded_targets)
     rng = np.random.default_rng(seed)
     tie_order = rng.permutation(num_rows)
     selected: list[int] = []
-    selected_set: set[int] = set()
+    selected_mask = np.zeros(num_rows, dtype=bool)
 
-    while any(remaining > 0 for remaining in requirements.values()):
-        best_idx = None
-        best_score = 0
-        for idx in tie_order:
-            idx = int(idx)
-            if idx in selected_set:
-                continue
-            score = sum(
-                requirements.get(feature, 0) > 0
-                for feature in row_features[idx]
-            )
-            if score > best_score:
-                best_idx = idx
-                best_score = score
-        if best_idx is None:
-            break
-        if len(selected) >= max_samples:
-            break
-        selected.append(best_idx)
-        selected_set.add(best_idx)
-        for feature in row_features[best_idx]:
-            if requirements.get(feature, 0) > 0:
-                requirements[feature] -= 1
+    def select_toward(requirements: list[np.ndarray]) -> None:
+        while len(selected) < max_samples and any(
+            np.any(remaining > 0) for remaining in requirements
+        ):
+            scores = np.zeros(num_rows, dtype=np.int64)
+            for target_idx, remaining in enumerate(requirements):
+                scores += remaining[encoded_matrix[:, target_idx]] > 0
+            scores[selected_mask] = -1
+            best_idx = int(tie_order[np.argmax(scores[tie_order])])
+            if scores[best_idx] <= 0:
+                break
+            selected.append(best_idx)
+            selected_mask[best_idx] = True
+            for target_idx, remaining in enumerate(requirements):
+                class_idx = encoded_matrix[best_idx, target_idx]
+                if remaining[class_idx] > 0:
+                    remaining[class_idx] -= 1
+
+    remaining_minimums = [
+        requirement.copy() for requirement in minimum_requirements
+    ]
+    select_toward(remaining_minimums)
+    if any(np.any(remaining > 0) for remaining in remaining_minimums):
+        raise ValueError(
+            "Unable to satisfy min_per_class for every target within "
+            f"max_samples={max_samples}"
+        )
+
+    selected_counts = [
+        np.bincount(
+            encoded_matrix[selected, target_idx],
+            minlength=len(class_counts[target_idx]),
+        )
+        for target_idx in range(encoded_matrix.shape[1])
+    ]
+    remaining_quotas = [
+        np.maximum(quota - counts, 0)
+        for quota, counts in zip(stratified_quotas, selected_counts)
+    ]
+    select_toward(remaining_quotas)
 
     remaining_slots = max_samples - len(selected)
     if remaining_slots:
-        remaining = np.array(
-            [idx for idx in range(num_rows) if idx not in selected_set],
-            dtype=np.int64,
-        )
+        remaining = np.flatnonzero(~selected_mask)
         selected.extend(
             rng.choice(remaining, size=remaining_slots, replace=False).tolist()
         )
@@ -107,10 +140,10 @@ def diverse_sample_dataframe(
     min_per_class: int = 2,
 ) -> pd.DataFrame:
     """Return a row-aligned, diversity-preserving subset of ``df``."""
-    if max_samples is None or len(df) <= max_samples:
-        return df.reset_index(drop=True)
     if len(labels) != len(df):
         raise ValueError("labels must contain one entry per dataframe row")
+    if max_samples is None or len(df) <= max_samples:
+        return df
     indices = diverse_sample_indices(
         labels,
         max_samples,

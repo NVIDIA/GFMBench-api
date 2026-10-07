@@ -124,10 +124,6 @@ class VepevalClinvarTask(BaseGFMZeroShotSNVTask):
         # Apply max_num_samples if specified (early slice for efficiency)
         if self.max_num_samples is not None:
             df = diverse_sample_dataframe(df, df["label"], self.max_num_samples)
-            print(
-                f"[Fast run] Using {len(df)} label-diverse SNVs "
-                f"(max_num_samples={self.max_num_samples})."
-            )
 
         # Load reference genome
         print(f"Loading reference genome: {self.reference_genome_path}")
