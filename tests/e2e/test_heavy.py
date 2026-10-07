@@ -163,13 +163,14 @@ def _run_heavy_benchmark(
 def _write_baseline(results_df: pd.DataFrame, baseline_path: Path) -> None:
     baseline_rows = []
     for _, row in results_df.iterrows():
-        if pd.isna(row["actual"]):
+        actual = pd.to_numeric(row["actual"], errors="coerce")
+        if not np.isfinite(actual):
             continue
         baseline_rows.append(
             {
                 "task": row["task"],
                 "metric": row["metric"],
-                "expected": row["actual"],
+                "expected": actual,
                 "atol": DEFAULT_ATOL,
             }
         )
@@ -209,5 +210,6 @@ def test_heavy_update_baseline(heavy_data_root, tmp_path):
     csv_path = tmp_path / "heavy_results.csv"
     baseline_path = _baseline_path(DEFAULT_HEAVY_MODEL)
     results_df = _run_heavy_benchmark(heavy_data_root, csv_path)
+    _assert_all_auroc_metrics_are_finite(results_df)
     _write_baseline(results_df, baseline_path)
     print(f"Wrote updated baseline to {baseline_path}")

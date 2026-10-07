@@ -74,8 +74,29 @@ def diverse_sample_indices(
         minimum_requirements.append(minimum)
         stratified_quotas.append(quota)
 
-    encoded_matrix = np.column_stack(encoded_targets)
     rng = np.random.default_rng(seed)
+
+    if label_matrix.shape[1] == 1:
+        # Scalar labels have disjoint classes, so sample their quotas directly.
+
+        encoded = encoded_targets[0]
+        counts = class_counts[0]
+        quota = stratified_quotas[0]
+        class_order = np.argsort(encoded, kind="stable")
+        class_starts = np.concatenate(([0], np.cumsum(counts)[:-1]))
+        selected = np.concatenate([
+            rng.choice(
+                class_order[start : start + count],
+                size=int(class_quota),
+                replace=False,
+            )
+            for start, count, class_quota in zip(
+                class_starts, counts, quota
+            )
+        ]).astype(np.int64, copy=False)
+        return rng.permutation(selected)
+
+    encoded_matrix = np.column_stack(encoded_targets)
     tie_order = rng.permutation(num_rows)
     selected: list[int] = []
     selected_mask = np.zeros(num_rows, dtype=bool)
