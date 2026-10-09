@@ -3,7 +3,7 @@
 This document lists third-party open source software, models, datasets, and data sources used with or pulled in by **GFMBench-API**. SPDX License List short identifiers are used where applicable. Custom or site-specific terms are indicated with `LicenseRef-*` (see project `LICENSE` and upstream sites for full text).
 ---
 
-## Python packages (direct dependencies in `requirements.txt`)
+## Python packages (direct dependencies in `basic_requirements.txt`)
 
 | Component | SPDX or license identifier | Notes |
 |-----------|----------------------------|--------|
@@ -36,6 +36,7 @@ This document lists third-party open source software, models, datasets, and data
 | multiprocess (multi_process) | BSD-3-Clause | |
 | networkx | BSD-3-Clause | |
 | numpy | BSD-3-Clause | |
+| openpyxl | MIT | |
 | pandas | BSD-3-Clause | |
 | propcache | Apache-2.0 | |
 | pyarrow | Apache-2.0 | |
@@ -66,6 +67,20 @@ This document lists third-party open source software, models, datasets, and data
 
 ---
 
+## Optional model integrations
+
+The following components support example model adapters but are not installed by `basic_requirements.txt` and are not distributed with GFMBench-API. Install only the components required by the model you intend to evaluate, and review their upstream licenses and dependency notices.
+
+| Component | URL | SPDX or license identifier | Notes |
+|-----------|-----|----------------------------|-------|
+| BioNeMo Framework | https://github.com/NVIDIA/bionemo-framework | Apache-2.0 | Optional Evo 2 checkpoint-loading support |
+| NVIDIA NeMo Framework | https://github.com/NVIDIA/NeMo | Apache-2.0 | Optional Evo 2 runtime |
+| Megatron Core | https://github.com/NVIDIA/Megatron-LM | BSD-3-Clause | Optional Evo 2 runtime; the upstream repository contains additional third-party notices |
+| Evo 2 software | https://github.com/ArcInstitute/evo2 | Apache-2.0 | Optional model integration; model checkpoints may be governed by separate terms |
+| NTv3 pretrained models (8M and 100M) | https://huggingface.co/InstaDeepAI/NTv3_100M_pre | LicenseRef-InstaDeep-NTv3-NonCommercial | Optional NTv3 integration; the models and their outputs are restricted to non-commercial purposes under the terms detailed below |
+
+---
+
 ## Hugging Face models and datasets (URLs)
 
 | Resource | URL | SPDX or license identifier |
@@ -73,9 +88,11 @@ This document lists third-party open source software, models, datasets, and data
 | DNABERT-2-117M | https://huggingface.co/zhihan1996/DNABERT-2-117M | Apache-2.0 |
 | DNA_bert_6 | https://huggingface.co/armheb/DNA_bert_6 | Apache-2.0 |
 | HyenaDNA tiny 16k (d128) | https://huggingface.co/LongSafari/hyenadna-tiny-16k-seqlen-d128-hf | Apache-2.0 |
-| GUE | https://huggingface.co/datasets/leannmlindsey/GUE | MIT |
+| GUE | https://github.com/MAGICS-LAB/DNABERT_2 | Apache-2.0 |
 | Genomics Long Range Benchmark | https://huggingface.co/datasets/InstaDeepAI/genomics-long-range-benchmark | CC-BY-NC-4.0 |
 | LOL-EVE eQTL benchmark | https://huggingface.co/datasets/Marks-lab/LOL-EVE-eQTL_benchmark | MIT |
+| NTv3 8M pretrained checkpoint | https://huggingface.co/InstaDeepAI/NTv3_8M_pre | LicenseRef-InstaDeep-NTv3-NonCommercial |
+| NTv3 100M pretrained checkpoint | https://huggingface.co/InstaDeepAI/NTv3_100M_pre | LicenseRef-InstaDeep-NTv3-NonCommercial |
 | variant-benchmark | https://huggingface.co/datasets/m42-health/variant-benchmark | CC-BY-NC-4.0 |
 | songlab/clinvar | https://huggingface.co/datasets/songlab/clinvar | MIT |
 | TraitGym | https://huggingface.co/datasets/songlab/TraitGym | MIT |
@@ -106,5 +123,6 @@ This document lists third-party open source software, models, datasets, and data
 - **LicenseRef-Ensembl-Data:** Use is subject to Ensembl / EMBL-EBI terms; see https://www.ensembl.org/info/about/legal/index.html
 - **LicenseRef-NCBI-Data:** NCBI policies apply; see https://www.ncbi.nlm.nih.gov/home/about/policies/
 - **LicenseRef-Biopython:** https://github.com/biopython/biopython/blob/master/LICENSE.rst
+- **LicenseRef-InstaDeep-NTv3-NonCommercial:** See the license terms for [NTv3 8M](https://huggingface.co/InstaDeepAI/NTv3_8M_pre) and [NTv3 100M](https://huggingface.co/InstaDeepAI/NTv3_100M_pre).
 
 Review all upstream license and attribution requirements before redistribution or commercial use.

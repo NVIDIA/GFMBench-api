@@ -13,13 +13,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# Third-party URL notices for this file (Python packages: THIRD_PARTY_NOTICES.md):
-# - https://huggingface.co/InstaDeepAI/NTv3_8M_pre — gated; accept license on HuggingFace
-# - https://huggingface.co/InstaDeepAI/NTv3_100M_pre — gated; accept license on HuggingFace
+# Third-party URL notices for this file (see THIRD_PARTY_NOTICES.md):
+# - https://huggingface.co/InstaDeepAI/NTv3_8M_pre — LicenseRef-InstaDeep-NTv3-NonCommercial
+# - https://huggingface.co/InstaDeepAI/NTv3_100M_pre — LicenseRef-InstaDeep-NTv3-NonCommercial
 """GFM-Bench adapter for InstaDeep Nucleotide Transformer v3 (NTv3).
 
-Requires the ``nucleotide-transformer`` package and HuggingFace access to the
-InstaDeepAI NTv3 checkpoints (``trust_remote_code=True``).
+Requires Transformers and Hugging Face access to the InstaDeepAI NTv3
+checkpoints (``trust_remote_code=True``).
 
 Supported ``model_name`` shortcuts:
     - ``NTv3_8M_pre``  -> ``InstaDeepAI/NTv3_8M_pre``

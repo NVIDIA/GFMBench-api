@@ -14,7 +14,7 @@
 # limitations under the License.
 
 # Third-party URL notices for this file (Python packages: THIRD_PARTY_NOTICES.md):
-# - https://huggingface.co/datasets/leannmlindsey/GUE — MIT
+# - https://github.com/MAGICS-LAB/DNABERT_2 — Apache-2.0
 import logging
 import os
 from typing import Any, Dict, Optional, Tuple
@@ -25,10 +25,7 @@ from torch.utils.data import Dataset
 
 from gfmbench_api.tasks.base.base_gfm_supervised_single_seq_task import BaseGFMSupervisedSingleSeqTask
 import numpy as np
-from gfmbench_api.utils.fileutils import (
-    download_hf_dataset_files,
-    gue_materialize_split_csvs_from_hf_disk,
-)
+from gfmbench_api.utils.fileutils import download_gue_dataset_files
 from gfmbench_api.utils.preprocutils import truncate_sequence_from_ends
 from gfmbench_api.utils.sampling_utils import diverse_sample_dataframe
 
@@ -38,9 +35,7 @@ class GuePromoterAllTask(BaseGFMSupervisedSingleSeqTask):
     
     def __init__(self, root_data_dir_path: str,
                  task_config: Optional[Dict[str, Any]] = None):
-        # HuggingFace dataset source
-        self.hf_repo_id = "leannmlindsey/GUE"
-        self.hf_subfolder = "prom_300_all"
+        self.gue_subfolder = "prom_300_all"
         
         super().__init__(root_data_dir_path, task_config)
     
@@ -68,16 +63,13 @@ class GuePromoterAllTask(BaseGFMSupervisedSingleSeqTask):
 
         # Download data if not exists
         if not all(os.path.exists(p) for p in [train_path, val_path, test_path]):
-            logging.info(f"Downloading {self.get_task_name()} from HuggingFace...")
-            download_hf_dataset_files(
-                repo_id=self.hf_repo_id,
-                subfolder=self.hf_subfolder,
+            logging.info("Downloading %s from the canonical GUE archive...", self.get_task_name())
+            download_gue_dataset_files(
+                subfolder=self.gue_subfolder,
                 splits=["train", "test", "dev"],
                 local_dir=data_dir
             )
             logging.info(f"Data saved to: {data_dir}")
-
-        gue_materialize_split_csvs_from_hf_disk(data_dir)
 
         # Load CSVs
         train_df = pd.read_csv(train_path)
