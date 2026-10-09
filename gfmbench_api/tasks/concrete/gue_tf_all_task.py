@@ -14,7 +14,7 @@
 # limitations under the License.
 
 # Third-party URL notices for this file (Python packages: THIRD_PARTY_NOTICES.md):
-# - https://huggingface.co/datasets/leannmlindsey/GUE — MIT
+# - https://github.com/MAGICS-LAB/DNABERT_2 — Apache-2.0
 import logging
 import os
 from typing import Any, Dict, Optional, Tuple
@@ -25,7 +25,7 @@ from torch.utils.data import Dataset
 
 from gfmbench_api.tasks.base.base_gfm_supervised_single_seq_task import BaseGFMSupervisedSingleSeqTask
 import numpy as np
-from gfmbench_api.utils.fileutils import download_hf_dataset_files
+from gfmbench_api.utils.fileutils import download_gue_dataset_files
 from gfmbench_api.utils.preprocutils import truncate_sequence_from_ends
 from gfmbench_api.utils.sampling_utils import diverse_sample_dataframe
 
@@ -34,9 +34,13 @@ class GueTranscriptionFactorTask(BaseGFMSupervisedSingleSeqTask):
 
     def __init__(self, root_data_dir_path: str,
                  task_config: Optional[Dict[str, Any]] = None):
-        # HuggingFace dataset source
-        self.hf_repo_id = "leannmlindsey/GUE"
-        self.hf_subfolder = ['human_tf_0', 'human_tf_1', 'human_tf_2', 'human_tf_3', 'human_tf_4']
+        self.gue_subfolders = [
+            "human_tf_0",
+            "human_tf_1",
+            "human_tf_2",
+            "human_tf_3",
+            "human_tf_4",
+        ]
         
         super().__init__(root_data_dir_path, task_config)
 
@@ -63,11 +67,10 @@ class GueTranscriptionFactorTask(BaseGFMSupervisedSingleSeqTask):
         test_path = os.path.join(data_dir, "test.csv")
 
         # Download data if not exists
-        if not all(os.path.exists(p) for p in [train_path, test_path]):
-            logging.info(f"Downloading {self.get_task_name()} from HuggingFace...")
-            download_hf_dataset_files(
-                repo_id=self.hf_repo_id,
-                subfolder=self.hf_subfolder,
+        if not all(os.path.exists(p) for p in [train_path, val_path, test_path]):
+            logging.info("Downloading %s from the canonical GUE archive...", self.get_task_name())
+            download_gue_dataset_files(
+                subfolder=self.gue_subfolders,
                 splits=["train", "test", "dev"],
                 local_dir=data_dir,
                 concat_tasks=True

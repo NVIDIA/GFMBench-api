@@ -88,7 +88,7 @@ The following components support example model adapters but are not installed by
 | DNABERT-2-117M | https://huggingface.co/zhihan1996/DNABERT-2-117M | Apache-2.0 |
 | DNA_bert_6 | https://huggingface.co/armheb/DNA_bert_6 | Apache-2.0 |
 | HyenaDNA tiny 16k (d128) | https://huggingface.co/LongSafari/hyenadna-tiny-16k-seqlen-d128-hf | Apache-2.0 |
-| GUE | https://huggingface.co/datasets/leannmlindsey/GUE | MIT |
+| GUE | https://github.com/MAGICS-LAB/DNABERT_2 | Apache-2.0 |
 | Genomics Long Range Benchmark | https://huggingface.co/datasets/InstaDeepAI/genomics-long-range-benchmark | CC-BY-NC-4.0 |
 | LOL-EVE eQTL benchmark | https://huggingface.co/datasets/Marks-lab/LOL-EVE-eQTL_benchmark | MIT |
 | NTv3 8M pretrained checkpoint | https://huggingface.co/InstaDeepAI/NTv3_8M_pre | LicenseRef-InstaDeep-NTv3-NonCommercial |
