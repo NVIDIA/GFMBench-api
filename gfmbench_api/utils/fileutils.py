@@ -17,10 +17,13 @@
 # - https://hgdownload.soe.ucsc.edu/goldenPath/hg38/bigZips/hg38.fa.gz — LicenseRef-UCSC-Genome-Browser
 import glob
 import gzip
+import hashlib
 import logging
 import os
 import pandas as pd
 import shutil
+import urllib.request
+import zipfile
 from typing import Callable, Iterable, List, Optional, Literal, Union
 
 from datasets import load_dataset, get_dataset_config_names, concatenate_datasets, DatasetDict
@@ -85,9 +88,9 @@ def download_hf_dataset_files(
 
     try:
         DatasetDict.load_from_disk(local_dir)
-        return # if dataset is already downloaded to the local dir
-    except:
-        logging.info('Dataset not found locally, downloading')
+        return
+    except Exception:
+        logging.info("Dataset not found locally, downloading")
 
     config_names = get_dataset_config_names(repo_id)
 
@@ -122,43 +125,91 @@ def download_hf_dataset_files(
         ds_dict.save_to_disk(local_dir)
 
 
-def gue_materialize_split_csvs_from_hf_disk(local_dir: str) -> None:
-    """
-    GUE single-config tasks expect ``train.csv``, ``dev.csv``, and ``test.csv`` under
-    ``local_dir``. ``download_hf_dataset_files(..., concat_tasks=False)`` only
-    writes a HuggingFace ``DatasetDict`` via ``save_to_disk``. This loads that
-    on-disk dict (when present) and writes any missing CSV splits
-    """
-    targets: list[tuple[str, tuple[str, ...]]] = [
-        ("train.csv", ("train",)),
-        ("dev.csv", ("dev", "validation")),
-        ("test.csv", ("test",)),
-    ]
-    out_paths = [os.path.join(local_dir, fname) for fname, _ in targets]
-    if all(os.path.exists(p) for p in out_paths):
-        return
+def _sha256_file(path: str) -> str:
+    digest = hashlib.sha256()
+    with open(path, "rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
 
+
+def ensure_verified_download(
+    url: str,
+    destination_path: str,
+    expected_sha256: str,
+    *,
+    description: str = "file",
+    timeout: int = 300,
+) -> str:
+    """Download a file atomically and verify its SHA-256 checksum."""
+    os.makedirs(os.path.dirname(os.path.abspath(destination_path)), exist_ok=True)
+
+    if os.path.isfile(destination_path):
+        if _sha256_file(destination_path) == expected_sha256:
+            return destination_path
+        logging.warning(
+            "Cached %s failed checksum validation; downloading again.",
+            description,
+        )
+        os.remove(destination_path)
+
+    partial_path = f"{destination_path}.part"
+    request = urllib.request.Request(
+        url,
+        headers={"User-Agent": "GFMBench-API"},
+    )
+    logging.info("Downloading %s.", description)
     try:
-        ddict = DatasetDict.load_from_disk(local_dir)
-    except Exception:
+        with urllib.request.urlopen(request, timeout=timeout) as response, open(
+            partial_path, "wb"
+        ) as output:
+            shutil.copyfileobj(response, output)
+
+        actual_sha256 = _sha256_file(partial_path)
+        if actual_sha256 != expected_sha256:
+            raise ValueError(
+                f"{description} checksum mismatch: "
+                f"expected {expected_sha256}, got {actual_sha256}"
+            )
+        os.replace(partial_path, destination_path)
+    finally:
+        if os.path.exists(partial_path):
+            os.remove(partial_path)
+
+    return destination_path
+
+
+def materialize_csv_splits_from_zip(
+    archive_path: str,
+    member_directories: list[str],
+    local_dir: str,
+    splits: list[str] = ["train", "test", "dev"],
+    concatenate: bool = False,
+) -> None:
+    """Copy or concatenate CSV splits from directories in a ZIP archive."""
+    os.makedirs(local_dir, exist_ok=True)
+    output_paths = [os.path.join(local_dir, f"{split}.csv") for split in splits]
+    if all(os.path.isfile(path) for path in output_paths):
         return
 
-    for fname, hf_keys in targets:
-        out_path = os.path.join(local_dir, fname)
-        if os.path.exists(out_path):
-            continue
-        key = next((k for k in hf_keys if k in ddict), None)
-        if key is None:
-            logging.warning(
-                "gue_materialize_split_csvs_from_hf_disk: no split in %s for %s "
-                "(dict keys: %s)",
-                local_dir,
-                fname,
-                list(ddict.keys()),
-            )
-            continue
-        ddict[key].to_pandas().to_csv(out_path, index=False)
-        logging.info("GUE: wrote %s from HuggingFace split %r", out_path, key)
+    if not member_directories:
+        raise ValueError("member_directories must not be empty")
+    if not concatenate and len(member_directories) != 1:
+        raise ValueError(
+            "Exactly one member directory is required when concatenate is False."
+        )
+
+    with zipfile.ZipFile(archive_path) as archive:
+        for split, output_path in zip(splits, output_paths):
+            members = [f"{directory}/{split}.csv" for directory in member_directories]
+            partial_path = f"{output_path}.part"
+            if concatenate:
+                frames = [pd.read_csv(archive.open(member)) for member in members]
+                pd.concat(frames, ignore_index=True).to_csv(partial_path, index=False)
+            else:
+                with archive.open(members[0]) as source, open(partial_path, "wb") as output:
+                    shutil.copyfileobj(source, output)
+            os.replace(partial_path, output_path)
 
 
 def iter_subset_dataframes(

@@ -14,10 +14,10 @@
 # limitations under the License.
 
 # Third-party URL notices for this file (Python packages: THIRD_PARTY_NOTICES.md):
-# - https://huggingface.co/datasets/leannmlindsey/GUE — MIT
+# - https://github.com/MAGICS-LAB/DNABERT_2 — Apache-2.0
 import logging
 import os
-from typing import Any, Dict, Optional, Tuple
+from typing import Optional, Tuple
 
 import pandas as pd
 import torch
@@ -26,23 +26,25 @@ from torch.utils.data import Dataset
 from gfmbench_api.tasks.base.base_gfm_supervised_single_seq_task import BaseGFMSupervisedSingleSeqTask
 import numpy as np
 from gfmbench_api.utils.fileutils import (
-    download_hf_dataset_files,
-    gue_materialize_split_csvs_from_hf_disk,
+    ensure_verified_download,
+    materialize_csv_splits_from_zip,
 )
 from gfmbench_api.utils.preprocutils import truncate_sequence_from_ends
 from gfmbench_api.utils.sampling_utils import diverse_sample_dataframe
 
+GUE_ARCHIVE_URL = (
+    "https://drive.usercontent.google.com/download"
+    "?id=1uOrwlf07qGQuruXqGXWMpPn8avBoW7T-&export=download&confirm=t"
+)
+GUE_MANUAL_DOWNLOAD_URL = (
+    "https://drive.google.com/file/d/1uOrwlf07qGQuruXqGXWMpPn8avBoW7T-/view"
+)
+GUE_ARCHIVE_SHA256 = "581ba5a69843769f4cbc34470e2fe970f8ee371280914bd66574af01ee60cd79"
+GUE_PROMOTER_ARCHIVE_DIR = "GUE/prom/prom_300_all"
+
 
 class GuePromoterAllTask(BaseGFMSupervisedSingleSeqTask):
     """GUE promoter prediction task (binary classification)."""
-    
-    def __init__(self, root_data_dir_path: str,
-                 task_config: Optional[Dict[str, Any]] = None):
-        # HuggingFace dataset source
-        self.hf_repo_id = "leannmlindsey/GUE"
-        self.hf_subfolder = "prom_300_all"
-        
-        super().__init__(root_data_dir_path, task_config)
     
     def _get_default_max_seq_len(self) -> int:
         """Return task's default maximum sequence length (300bp)."""
@@ -68,16 +70,35 @@ class GuePromoterAllTask(BaseGFMSupervisedSingleSeqTask):
 
         # Download data if not exists
         if not all(os.path.exists(p) for p in [train_path, val_path, test_path]):
-            logging.info(f"Downloading {self.get_task_name()} from HuggingFace...")
-            download_hf_dataset_files(
-                repo_id=self.hf_repo_id,
-                subfolder=self.hf_subfolder,
+            logging.info("Downloading %s from the canonical GUE archive...", self.get_task_name())
+            archive_path = os.path.join(
+                self.root_data_dir_path, ".downloads", "GUE.zip"
+            )
+            try:
+                ensure_verified_download(
+                    url=GUE_ARCHIVE_URL,
+                    destination_path=archive_path,
+                    expected_sha256=GUE_ARCHIVE_SHA256,
+                    description="canonical GUE archive from the DNABERT-2 source",
+                )
+            except (OSError, ValueError) as error:
+                raise RuntimeError(
+                    "Failed to automatically download the canonical GUE archive, "
+                    "possibly because the Google Drive download quota was exceeded.\n\n"
+                    "To download it manually:\n"
+                    f"1. Visit: {GUE_MANUAL_DOWNLOAD_URL}\n"
+                    "2. Download the ZIP archive.\n"
+                    f"3. Save it as: {archive_path}\n"
+                    f"4. Verify its SHA-256 is: {GUE_ARCHIVE_SHA256}\n\n"
+                    f"Original error: {error}"
+                ) from error
+            materialize_csv_splits_from_zip(
+                archive_path=archive_path,
+                member_directories=[GUE_PROMOTER_ARCHIVE_DIR],
                 splits=["train", "test", "dev"],
-                local_dir=data_dir
+                local_dir=data_dir,
             )
             logging.info(f"Data saved to: {data_dir}")
-
-        gue_materialize_split_csvs_from_hf_disk(data_dir)
 
         # Load CSVs
         train_df = pd.read_csv(train_path)
