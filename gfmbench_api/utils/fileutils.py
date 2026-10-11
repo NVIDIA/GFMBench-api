@@ -15,7 +15,6 @@
 
 # Third-party URL notices for this file (Python packages: THIRD_PARTY_NOTICES.md):
 # - https://hgdownload.soe.ucsc.edu/goldenPath/hg38/bigZips/hg38.fa.gz — LicenseRef-UCSC-Genome-Browser
-# - https://github.com/MAGICS-LAB/DNABERT_2 — Apache-2.0 (GUE source)
 import glob
 import gzip
 import hashlib
@@ -31,21 +30,6 @@ from datasets import load_dataset, get_dataset_config_names, concatenate_dataset
 
 from huggingface_hub import hf_hub_download
 from huggingface_hub.utils import EntryNotFoundError, HfHubHTTPError
-
-GUE_ARCHIVE_URL = (
-    "https://drive.usercontent.google.com/download"
-    "?id=1uOrwlf07qGQuruXqGXWMpPn8avBoW7T-&export=download&confirm=t"
-)
-GUE_ARCHIVE_SHA256 = "581ba5a69843769f4cbc34470e2fe970f8ee371280914bd66574af01ee60cd79"
-GUE_ARCHIVE_MEMBERS = {
-    "prom_300_all": "GUE/prom/prom_300_all",
-    "splice_reconstructed": "GUE/splice/reconstructed",
-    "human_tf_0": "GUE/tf/0",
-    "human_tf_1": "GUE/tf/1",
-    "human_tf_2": "GUE/tf/2",
-    "human_tf_3": "GUE/tf/3",
-    "human_tf_4": "GUE/tf/4",
-}
 
 # =============================================================================
 # HuggingFace Dataset Utilities
@@ -104,9 +88,9 @@ def download_hf_dataset_files(
 
     try:
         DatasetDict.load_from_disk(local_dir)
-        return # if dataset is already downloaded to the local dir
-    except:
-        logging.info('Dataset not found locally, downloading')
+        return
+    except Exception:
+        logging.info("Dataset not found locally, downloading")
 
     config_names = get_dataset_config_names(repo_id)
 
@@ -149,84 +133,83 @@ def _sha256_file(path: str) -> str:
     return digest.hexdigest()
 
 
-def _ensure_gue_archive(root_data_dir: str) -> str:
-    cache_dir = os.path.join(root_data_dir, ".downloads")
-    archive_path = os.path.join(cache_dir, "GUE.zip")
-    os.makedirs(cache_dir, exist_ok=True)
+def ensure_verified_download(
+    url: str,
+    destination_path: str,
+    expected_sha256: str,
+    *,
+    description: str = "file",
+    timeout: int = 300,
+) -> str:
+    """Download a file atomically and verify its SHA-256 checksum."""
+    os.makedirs(os.path.dirname(os.path.abspath(destination_path)), exist_ok=True)
 
-    if os.path.isfile(archive_path):
-        if _sha256_file(archive_path) == GUE_ARCHIVE_SHA256:
-            return archive_path
-        logging.warning("Cached GUE archive failed checksum validation; downloading again.")
-        os.remove(archive_path)
+    if os.path.isfile(destination_path):
+        if _sha256_file(destination_path) == expected_sha256:
+            return destination_path
+        logging.warning(
+            "Cached %s failed checksum validation; downloading again.",
+            description,
+        )
+        os.remove(destination_path)
 
-    partial_path = f"{archive_path}.part"
+    partial_path = f"{destination_path}.part"
     request = urllib.request.Request(
-        GUE_ARCHIVE_URL,
+        url,
         headers={"User-Agent": "GFMBench-API"},
     )
-    logging.info("Downloading canonical GUE archive from the DNABERT-2 source.")
+    logging.info("Downloading %s.", description)
     try:
-        with urllib.request.urlopen(request, timeout=300) as response, open(
+        with urllib.request.urlopen(request, timeout=timeout) as response, open(
             partial_path, "wb"
         ) as output:
             shutil.copyfileobj(response, output)
 
         actual_sha256 = _sha256_file(partial_path)
-        if actual_sha256 != GUE_ARCHIVE_SHA256:
+        if actual_sha256 != expected_sha256:
             raise ValueError(
-                "GUE archive checksum mismatch: "
-                f"expected {GUE_ARCHIVE_SHA256}, got {actual_sha256}"
+                f"{description} checksum mismatch: "
+                f"expected {expected_sha256}, got {actual_sha256}"
             )
-        os.replace(partial_path, archive_path)
+        os.replace(partial_path, destination_path)
     finally:
         if os.path.exists(partial_path):
             os.remove(partial_path)
 
-    return archive_path
+    return destination_path
 
 
-def download_gue_dataset_files(
-    subfolder: str | list[str],
+def materialize_csv_splits_from_zip(
+    archive_path: str,
+    member_directories: list[str],
     local_dir: str,
     splits: list[str] = ["train", "test", "dev"],
-    concat_tasks: bool = False,
+    concatenate: bool = False,
 ) -> None:
-    """Download verified GUE CSVs from the canonical archive linked by DNABERT-2."""
+    """Copy or concatenate CSV splits from directories in a ZIP archive."""
     os.makedirs(local_dir, exist_ok=True)
     output_paths = [os.path.join(local_dir, f"{split}.csv") for split in splits]
     if all(os.path.isfile(path) for path in output_paths):
         return
 
-    if concat_tasks:
-        if not isinstance(subfolder, list):
-            raise TypeError("When concat_tasks is True, subfolder must be a list.")
-        source_names = subfolder
-    else:
-        if not isinstance(subfolder, str):
-            raise TypeError("When concat_tasks is False, subfolder must be a string.")
-        source_names = [subfolder]
+    if not member_directories:
+        raise ValueError("member_directories must not be empty")
+    if not concatenate and len(member_directories) != 1:
+        raise ValueError(
+            "Exactly one member directory is required when concatenate is False."
+        )
 
-    unknown = [name for name in source_names if name not in GUE_ARCHIVE_MEMBERS]
-    if unknown:
-        raise ValueError(f"Unknown GUE dataset names: {unknown}")
-
-    root_data_dir = os.path.dirname(os.path.abspath(local_dir))
-    archive_path = _ensure_gue_archive(root_data_dir)
     with zipfile.ZipFile(archive_path) as archive:
         for split, output_path in zip(splits, output_paths):
-            members = [
-                f"{GUE_ARCHIVE_MEMBERS[name]}/{split}.csv"
-                for name in source_names
-            ]
-            if concat_tasks:
+            members = [f"{directory}/{split}.csv" for directory in member_directories]
+            partial_path = f"{output_path}.part"
+            if concatenate:
                 frames = [pd.read_csv(archive.open(member)) for member in members]
-                pd.concat(frames, ignore_index=True).to_csv(output_path, index=False)
+                pd.concat(frames, ignore_index=True).to_csv(partial_path, index=False)
             else:
-                partial_path = f"{output_path}.part"
                 with archive.open(members[0]) as source, open(partial_path, "wb") as output:
                     shutil.copyfileobj(source, output)
-                os.replace(partial_path, output_path)
+            os.replace(partial_path, output_path)
 
 
 def iter_subset_dataframes(
