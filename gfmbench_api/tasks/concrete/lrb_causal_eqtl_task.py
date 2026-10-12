@@ -26,18 +26,27 @@ import torch.optim as optim
 from torch.utils.data import Dataset, DataLoader, random_split
 from tqdm import tqdm
 from pyfaidx import Fasta
-from typing import Any, Tuple, Optional, Dict, List
+from typing import Any, Callable, Tuple, Optional, Dict, List
 
 # Framework Imports
 from gfmbench_api.tasks.base.base_gfm_supervised_variant_effect_task import BaseGFMSupervisedVariantEffectTask
 from gfmbench_api.utils.fileutils import ensure_hf_hub_file, ensure_reference_genome
+from gfmbench_api.utils.locus import GenomicLocus
 from gfmbench_api.utils.preprocutils import standardize_sequence, pad_sequence_centered_variant
 from gfmbench_api.utils.sampling_utils import diverse_sample_dataframe
 
 
 class _LRBCausalEqtlDataset(Dataset):
-    def __init__(self, df: pd.DataFrame, fasta: Fasta, seq_len: int, tissue_map: Dict[str, int]):
+    def __init__(
+        self,
+        df: pd.DataFrame,
+        fasta: Fasta,
+        seq_len: int,
+        tissue_map: Dict[str, int],
+        conditional: Optional[Callable[[Any, GenomicLocus], Any]] = None,
+    ):
         self.df = df.reset_index(drop=True)
+        self.conditional = conditional
         self.fasta = fasta
         self.seq_len = seq_len
         self.tissue_map = tissue_map
@@ -74,6 +83,9 @@ class _LRBCausalEqtlDataset(Dataset):
         # conditional_input is a vector of shape (num_metadata,) - here (1,) for tissue_id
         # When batched, becomes (batch_size, 1)
         conditional_input = np.array([tissue_id], dtype=np.float32)
+        if self.conditional is not None:
+            locus = GenomicLocus("GRCh38", chrom, pos_0, ref.upper(), alt.upper())
+            conditional_input = self.conditional(conditional_input, locus)
         return standardize_sequence(alt_seq), standardize_sequence(ref_seq), label, conditional_input
 
 
@@ -84,6 +96,8 @@ class LRBCausalEqtlTask(BaseGFMSupervisedVariantEffectTask):
     LRB Causal eQTL Task.
     Includes Data Loading and Twin-Tower Architecture Integration.
     """
+
+    SUPPORTS_GENOMIC_LOCUS = True
 
     def get_task_name(self) -> str:
         return "lrb_variant_effect_causal_eqtl"
@@ -143,8 +157,9 @@ class LRBCausalEqtlTask(BaseGFMSupervisedVariantEffectTask):
 
         # 6. Datasets
         seq_len = self.max_sequence_length
-        train_ds = _LRBCausalEqtlDataset(train_df, fasta, seq_len, self.tissue_map)
-        test_ds = _LRBCausalEqtlDataset(test_df, fasta, seq_len, self.tissue_map)
+        conditional = self._conditional_input if self.emit_genomic_locus else None
+        train_ds = _LRBCausalEqtlDataset(train_df, fasta, seq_len, self.tissue_map, conditional)
+        test_ds = _LRBCausalEqtlDataset(test_df, fasta, seq_len, self.tissue_map, conditional)
         
         # Note: returning None for validation set here. 
         # The split is dynamic based on seed in fine_tune() method
@@ -158,11 +173,12 @@ class LRBCausalEqtlTask(BaseGFMSupervisedVariantEffectTask):
         for the eQTL variant effect prediction.
         
         Returns:
-            DataFrame with metadata schema for tissue_id
+            DataFrame with metadata schema for tissue_id, followed by the
+            genomic locus rows when the task emits them
         """
-        return pd.DataFrame({
+        return self._conditional_metadata(pd.DataFrame({
             'meta_data_name': ['tissue_id'],
             'data_type': ['integer'],
             'min_value': [0],
             'max_value': [self.num_tissues - 1]
-        })
+        }))

@@ -46,6 +46,8 @@ class VepevalClinvarTask(BaseGFMZeroShotSNVTask):
     - max_num_samples: Maximum number of samples to use (default: None = use all)
     """
 
+    SUPPORTS_GENOMIC_LOCUS = True
+
     def __init__(
         self,
         root_data_dir_path: str,
@@ -130,7 +132,7 @@ class VepevalClinvarTask(BaseGFMZeroShotSNVTask):
         genome = Fasta(self.reference_genome_path)
 
         # Extract sequences using shared utility function
-        variant_sequences, reference_sequences, labels, skipped = extract_snv_sequences_centered(
+        extracted = extract_snv_sequences_centered(
             df=df,
             genome=genome,
             max_sequence_length=self.max_sequence_length,
@@ -140,7 +142,10 @@ class VepevalClinvarTask(BaseGFMZeroShotSNVTask):
             alt_col="alt",
             label_col="label",
             use_logging=False,  # Use print for consistency with existing behavior
+            locus_assembly="GRCh38" if self.emit_genomic_locus else None,
         )
+        variant_sequences, reference_sequences, labels, skipped = extracted[:4]
+        loci = extracted[4] if self.emit_genomic_locus else [None] * len(labels)
 
         if skipped > 0:
             print(f"Skipped {skipped} variants due to extraction issues or non-SNV records.")
@@ -152,8 +157,10 @@ class VepevalClinvarTask(BaseGFMZeroShotSNVTask):
         # Create dataset: (variant_sequence, reference_sequence, label, conditional_input) tuples
         # conditional_input is empty numpy array since this task has no conditional metadata
         test_dataset = [
-            (var_seq, ref_seq, label, np.array([], dtype=np.float32))
-            for var_seq, ref_seq, label in zip(variant_sequences, reference_sequences, self.labels)
+            (var_seq, ref_seq, label, self._conditional_input(np.array([], dtype=np.float32), locus))
+            for var_seq, ref_seq, label, locus in zip(
+                variant_sequences, reference_sequences, self.labels, loci
+            )
         ]
 
         print(f"ClinVar VEP-eval test dataset ready with {len(test_dataset)} samples.")
@@ -303,5 +310,5 @@ class VepevalClinvarTask(BaseGFMZeroShotSNVTask):
         return 1048576
 
     def get_conditional_input_meta_data_frame(self) -> Optional[pd.DataFrame]:
-        """Return None as this task has no conditional metadata inputs."""
-        return None
+        """Return None unless the task emits genomic locus columns."""
+        return self._conditional_metadata(None)

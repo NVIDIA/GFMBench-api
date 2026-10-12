@@ -315,7 +315,7 @@ class IsolatedMockModel(BaseGFMModel):
         probs, embeds, reprs = resp["result"]
         return self._as_array(probs), self._as_array(embeds), self._as_array(reprs)
 
-    def sequence_pos_to_prob_pos(self, sequences: List[str], pos: int) -> np.ndarray:
+    def sequence_pos_to_prob_pos(self, sequences: List[str], pos: int, conditional_input=None) -> np.ndarray:
         resp = self._call(
             "sequence_pos_to_prob_pos",
             {"sequences": list(sequences), "pos": int(pos)},

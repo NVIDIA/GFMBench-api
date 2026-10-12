@@ -26,6 +26,8 @@ import re
 from Bio.Seq import reverse_complement
 from pyfaidx import Fasta
 
+from gfmbench_api.utils.locus import GenomicLocus
+
 # =============================================================================
 # Sequence Processing Utilities
 # =============================================================================
@@ -238,6 +240,37 @@ def build_forward_centered_seqs(
 
     return dataset
 
+def build_forward_centered_loci(
+    df: pd.DataFrame,
+    *,
+    position_col: str,
+    one_based: bool,
+    assembly: str = "GRCh38",
+    alt_left_col: str = "alt_left",
+    ref_left_col: str = "ref_left",
+    chrom_col: str = "chrom",
+) -> List[GenomicLocus]:
+    """
+    One GenomicLocus per row of a BioFM-format frame, aligned with
+    ``build_forward_centered_seqs``. The SNP bases are the last characters of
+    the cleaned left sequences (``alt_left`` carries the tagged alternate base).
+    """
+    reverse_variant_map = {"Â": "A", "Ĉ": "C", "Ĝ": "G", "Ṱ": "T"}
+
+    def _snp_base(left_raw) -> Optional[str]:
+        left = clean_seq(left_raw)
+        if not left:
+            return None
+        return reverse_variant_map.get(left[-1], left[-1]).upper()
+
+    offset = 1 if one_based else 0
+    return [
+        GenomicLocus(assembly, str(chrom), int(position) - offset, _snp_base(ref_left), _snp_base(alt_left))
+        for chrom, position, ref_left, alt_left in zip(
+            df[chrom_col], df[position_col], df[ref_left_col], df[alt_left_col]
+        )
+    ]
+
 def get_reference_sequence(
     genome: Fasta,
     chrom: str,
@@ -433,7 +466,8 @@ def extract_snv_sequences_centered(
     alt_col: str = 'alt',
     label_col: str = 'label',
     use_logging: bool = True,
-) -> Tuple[List[str], List[str], List[int], int]:
+    locus_assembly: Optional[str] = None,
+) -> Tuple:
     """
     Extract centered SNV sequences from reference genome using VCF 1-based positions.
     
@@ -455,9 +489,12 @@ def extract_snv_sequences_centered(
         alt_col: Column name for alternate allele (must be single nucleotide)
         label_col: Column name for labels
         use_logging: If True, use logging.info; if False, use print
+        locus_assembly: If set (e.g. "GRCh38"), also return one GenomicLocus per
+            extracted variant, aligned with the sequence lists
     
     Returns:
-        Tuple of (variant_sequences, reference_sequences, labels, num_skipped)
+        Tuple of (variant_sequences, reference_sequences, labels, num_skipped),
+        followed by the list of loci when ``locus_assembly`` is set.
         Note: Returns (var_seqs, ref_seqs, ...) to match expected task ordering
     
     Validation checks:
@@ -499,6 +536,7 @@ def extract_snv_sequences_centered(
     reference_sequences: List[str] = []
     variant_sequences: List[str] = []
     labels: List[int] = []
+    loci: List[GenomicLocus] = []
     skipped = 0
     skipped_non_snv = 0
     skipped_ref_mismatch = 0
@@ -597,6 +635,10 @@ def extract_snv_sequences_centered(
             reference_sequences.append(ref_seq)
             variant_sequences.append(var_seq)
             labels.append(label)
+            if locus_assembly is not None:
+                loci.append(
+                    GenomicLocus(locus_assembly, chrom_key, variant_pos_0based, ref_allele, alt_allele)
+                )
     
     if skipped > 0:
         log_fn(
@@ -606,6 +648,8 @@ def extract_snv_sequences_centered(
         )
     
     # Return (var_seqs, ref_seqs, labels, skipped) to match task expectations
+    if locus_assembly is not None:
+        return variant_sequences, reference_sequences, labels, skipped, loci
     return variant_sequences, reference_sequences, labels, skipped
 
 

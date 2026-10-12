@@ -36,6 +36,8 @@ class LRBEnhancerTask(BaseGFMSupervisedSingleSeqTask):
     is binary. Train = chr1-7,10-22; test = chr8,9.
     """
 
+    SUPPORTS_GENOMIC_LOCUS = True
+
     def _get_default_max_seq_len(self) -> int:
         # Builder default context is 100kb.
         return 100000
@@ -65,9 +67,10 @@ class LRBEnhancerTask(BaseGFMSupervisedSingleSeqTask):
             element="enhancer",
             subset=subset,
             max_num_samples=self.max_num_samples,
+            conditional=self._conditional_input if self.emit_genomic_locus else None,
         )
         return train_dataset, None, test_dataset
 
     def get_conditional_input_meta_data_frame(self) -> Optional[pd.DataFrame]:
-        """Return None as this task has no conditional metadata inputs."""
-        return None
+        """Return None unless the task emits genomic locus columns."""
+        return self._conditional_metadata(None)

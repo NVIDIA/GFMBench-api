@@ -82,13 +82,21 @@ class BaseGFMZeroShotSNVTask(BaseGFMZeroShotTask):
         """
         # Get the SNV position in the input sequence
         snv_input_pos = self._get_variant_position_in_sequence()
+
+        # Locus-emitting tasks forward conditional_input so coordinate-aware
+        # models can place the SNV; other tasks keep the two-argument calls.
+        conditional = (
+            (outputs.get('conditional_input'),) if self.emit_genomic_locus else ()
+        )
         
         # Map input position to output positions for each sequence in the batch
         variant_snv_output_pos, = self._safe_model_call(
-            model, 'sequence_pos_to_prob_pos', variant_sequences, snv_input_pos, num_outputs=1
+            model, 'sequence_pos_to_prob_pos', variant_sequences, snv_input_pos, *conditional,
+            num_outputs=1
         )
         reference_snv_output_pos, = self._safe_model_call(
-            model, 'sequence_pos_to_prob_pos', reference_sequences, snv_input_pos, num_outputs=1
+            model, 'sequence_pos_to_prob_pos', reference_sequences, snv_input_pos, *conditional,
+            num_outputs=1
         )
 
         # Get masked token probabilities for variant and reference nucleotides
@@ -96,7 +104,7 @@ class BaseGFMZeroShotSNVTask(BaseGFMZeroShotTask):
         reference_letters = [seq[snv_input_pos] for seq in reference_sequences]
         variant_token_probs_np, reference_token_probs_np = self._safe_model_call(
             model, 'infer_masked_sequence_to_token_probs', 
-            variant_sequences, snv_input_pos, variant_letters, reference_letters,
+            variant_sequences, snv_input_pos, variant_letters, reference_letters, *conditional,
             num_outputs=2
         )
         

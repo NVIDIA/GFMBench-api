@@ -181,7 +181,7 @@ class DNABERT2Model(nn.Module):
             sequence_representative.detach().cpu().numpy(),
         )
 
-    def sequence_pos_to_prob_pos(self, sequences, pos):
+    def sequence_pos_to_prob_pos(self, sequences, pos, conditional_input=None):
         batch_size = len(sequences)
         output_positions = np.zeros(batch_size, dtype=np.int32)
 

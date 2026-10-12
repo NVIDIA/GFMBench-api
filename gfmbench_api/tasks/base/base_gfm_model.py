@@ -114,7 +114,12 @@ class BaseGFMModel(ABC):
         pass
     
     @abstractmethod
-    def sequence_pos_to_prob_pos(self, sequences: List[str], pos: int) -> np.ndarray:
+    def sequence_pos_to_prob_pos(
+        self,
+        sequences: List[str],
+        pos: int,
+        conditional_input: Optional[np.ndarray] = None,
+    ) -> np.ndarray:
         """
         Map input DNA sequence position to output sequence position (accounting for tokenization).
         
@@ -128,6 +133,9 @@ class BaseGFMModel(ABC):
                                   For BPE tokenizers, the tokenization depends on sequence content
             pos: int - position in the input DNA sequence (0-based index)
                      For sequence "ATCGTA", pos=0 is 'A', pos=3 is 'G', etc.
+            conditional_input: Optional[np.ndarray] - the batch's metadata inputs. Zero-shot
+                     SNV tasks pass it only when created with emit_genomic_locus, so
+                     coordinate-aware models can map the SNV through its genomic locus.
         
         Returns:
             np.ndarray: array of shape [batch_size] containing the corresponding output position

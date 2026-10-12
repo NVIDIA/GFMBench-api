@@ -269,7 +269,7 @@ class DNABERTModel(BaseGFMModel):
             sequence_representative.cpu().numpy()
         )
     
-    def sequence_pos_to_prob_pos(self, sequences, pos):
+    def sequence_pos_to_prob_pos(self, sequences, pos, conditional_input=None):
         """
         Map input DNA sequence position to output position for k-mer tokenization.
         

@@ -114,7 +114,7 @@ class GFMWithProjection(BaseGFMModel):
         """
         return self.base_model.infer_sequence_to_sequence(sequences, conditional_input)
     
-    def sequence_pos_to_prob_pos(self, sequences: List[str], pos: int) -> np.ndarray:
+    def sequence_pos_to_prob_pos(self, sequences: List[str], pos: int, conditional_input=None) -> np.ndarray:
         """
         Delegate to the base model's sequence_pos_to_prob_pos method.
         
@@ -125,7 +125,9 @@ class GFMWithProjection(BaseGFMModel):
         Returns:
             np.ndarray: array of shape [batch_size] with output positions
         """
-        return self.base_model.sequence_pos_to_prob_pos(sequences, pos)
+        if conditional_input is None:
+            return self.base_model.sequence_pos_to_prob_pos(sequences, pos)
+        return self.base_model.sequence_pos_to_prob_pos(sequences, pos, conditional_input)
     
     def eval(self) -> 'GFMWithProjection':
         """Set model to evaluation mode."""

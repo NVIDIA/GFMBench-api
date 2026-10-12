@@ -19,9 +19,14 @@ from typing import Any, Dict, List, Optional, Tuple
 from torch.utils.data import Dataset, Subset
 import pandas as pd
 
+from gfmbench_api.utils.locus import GenomicLocus, append_locus, locus_metadata_frame
+
 
 class BaseGFMTask(ABC):
 
+    # Tasks built from genome coordinates set this and pass every example's
+    # locus through _conditional_input() and _conditional_metadata().
+    SUPPORTS_GENOMIC_LOCUS: bool = False
     
     def __init__(self, root_data_dir_path: str,
                  task_config: Optional[Dict[str, Any]] = None) -> None:
@@ -41,6 +46,9 @@ class BaseGFMTask(ABC):
                            If None or not provided, all samples are loaded.
                          - "cache_size": float or None - cache RAM limit in GB (default: None = unlimited).
                            0 disables inference caching.
+                         - "emit_genomic_locus": bool - append the genomic locus columns of
+                           gfmbench_api.utils.locus to every example's conditional_input
+                           (default: False). Only tasks with SUPPORTS_GENOMIC_LOCUS emit them.
         """
         self.root_data_dir_path: str = root_data_dir_path
         self.task_config: Optional[Dict[str, Any]] = task_config or {}
@@ -59,6 +67,10 @@ class BaseGFMTask(ABC):
 
         # Extract cache_size from task_config (default: None = unlimited)
         self.cache_size: Optional[float] = self.task_config.get("cache_size", None)
+
+        self.emit_genomic_locus: bool = bool(
+            self.task_config.get("emit_genomic_locus", False)
+        ) and self.SUPPORTS_GENOMIC_LOCUS
         
         # Compute effective max_sequence_length
         self.max_sequence_length: int = self._get_max_sequence_length()
@@ -83,6 +95,22 @@ class BaseGFMTask(ABC):
         if config_max is not None:
             return min(task_default_max, config_max)
         return task_default_max
+
+    def _conditional_input(
+        self, conditional_input: Any, locus: Optional[GenomicLocus]
+    ) -> Any:
+        """Return ``conditional_input``, followed by ``locus`` when emitting loci."""
+        if not self.emit_genomic_locus:
+            return conditional_input
+        if locus is None:
+            raise ValueError(f"Task {self.get_task_name()} produced an example without a locus")
+        return append_locus(conditional_input, locus)
+
+    def _conditional_metadata(self, metadata: Optional[pd.DataFrame]) -> Optional[pd.DataFrame]:
+        """Return the conditional-input schema, with the locus rows when emitting loci."""
+        if not self.emit_genomic_locus:
+            return metadata
+        return locus_metadata_frame(metadata)
     
     @abstractmethod
     def _get_default_max_seq_len(self) -> int:

@@ -224,7 +224,7 @@ class NucleotideTransformerV3Model(BaseGFMModel):
         denom = torch.clamp(expanded.sum(1), min=1e-9)
         return summed / denom
 
-    def sequence_pos_to_prob_pos(self, sequences: List[str], pos: int) -> np.ndarray:
+    def sequence_pos_to_prob_pos(self, sequences: List[str], pos: int, conditional_input=None) -> np.ndarray:
         if self.sequence_representative_type == "CLS":
             return np.full(len(sequences), pos + 1, dtype=np.int32)
         return np.full(len(sequences), pos, dtype=np.int32)

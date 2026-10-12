@@ -26,7 +26,7 @@ from datasets import DatasetDict
 from gfmbench_api.tasks.base.base_gfm_supervised_variant_effect_task import BaseGFMSupervisedVariantEffectTask
 import numpy as np
 from gfmbench_api.utils.fileutils import download_hf_dataset_files
-from gfmbench_api.utils.preprocutils import build_forward_centered_seqs
+from gfmbench_api.utils.preprocutils import build_forward_centered_loci, build_forward_centered_seqs
 from gfmbench_api.utils.sampling_utils import diverse_sample_dataframe
 
 #BioFM based chromosome splits for cross-validation
@@ -81,6 +81,9 @@ class VariantBenchmarksCommonVsRareTask(BaseGFMSupervisedVariantEffectTask):
 
     In order to support the general "ref_seq", "alt_seq", "label" format, this task optionally extracts forward-strand, SNP-centered var and ref sequences
     """
+
+    SUPPORTS_GENOMIC_LOCUS = True
+
     def __init__(self, root_data_dir_path: str,
                  task_config: Optional[Dict[str, Any]] = None):
         # HuggingFace dataset source
@@ -144,21 +147,29 @@ class VariantBenchmarksCommonVsRareTask(BaseGFMSupervisedVariantEffectTask):
         X_train = build_forward_centered_seqs(train_df)
         y_train = torch.tensor(train_df['label'].values, dtype=torch.long)
 
-        train_dataset = [(var_seq, ref_seq, label, np.array([])) 
-                            for var_seq, ref_seq, label in 
-                            zip(X_train['variant_sequence'], X_train['reference_sequence'], y_train)]
+        train_dataset = [(var_seq, ref_seq, label, self._conditional_input(np.array([]), locus))
+                            for var_seq, ref_seq, label, locus in
+                            zip(X_train['variant_sequence'], X_train['reference_sequence'], y_train,
+                                self._loci(train_df))]
         
         X_test = build_forward_centered_seqs(test_df)
         y_test = torch.tensor(test_df['label'].values, dtype=torch.long)
         
-        test_dataset = [(var_seq, ref_seq, label, np.array([])) 
-                            for var_seq, ref_seq, label in 
-                            zip(X_test['variant_sequence'], X_test['reference_sequence'], y_test)]         
+        test_dataset = [(var_seq, ref_seq, label, self._conditional_input(np.array([]), locus))
+                            for var_seq, ref_seq, label, locus in
+                            zip(X_test['variant_sequence'], X_test['reference_sequence'], y_test,
+                                self._loci(test_df))]         
         
 
         return train_dataset, None, test_dataset
+
+    def _loci(self, df: pd.DataFrame) -> List[Any]:
+        """GRCh38 loci aligned with the rows of ``df`` (1-based ``position`` column)."""
+        if not self.emit_genomic_locus:
+            return [None] * len(df)
+        return build_forward_centered_loci(df, position_col="position", one_based=True)
     
     def get_conditional_input_meta_data_frame(self) -> Optional[pd.DataFrame]:
-        """Return None as this task has no conditional metadata inputs."""
-        return None
+        """Return None unless the task emits genomic locus columns."""
+        return self._conditional_metadata(None)
     

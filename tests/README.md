@@ -39,6 +39,7 @@ pytest tests/ --cov=gfmbench_api --cov-report=term-missing
 |------|----------------|---------|-----|
 | `tests/unit/test_caching_utils.py` | `SequenceInferenceCache` semantics — cache hits/misses, dedup, disable, clear, size limits, output type fidelity, key correctness, variable-length padding | No | No |
 | `tests/unit/test_sampling_utils.py` | Deterministic stratified sampling, scalar and multitarget coverage, infeasible limits, validation, and dataframe no-op behavior | No | No |
+| `tests/unit/test_locus_utils.py` | Genomic locus columns of `conditional_input` — encoding, schema, batch decoding, aligned loci from the extraction helpers, SNV metric forwarding | No | No |
 | `tests/e2e/test_smoke.py` | Full eval pipeline with `MockGFMModel` and local fixture CSVs | No | No |
 | `tests/e2e/test_download.py` | Tasks download data into an empty temp directory | Yes | No |
 | `tests/e2e/test_heavy.py` | Real DNABERT2 benchmark on all tasks (sanity mode); scores compared to pinned baseline CSV | Yes | Recommended |

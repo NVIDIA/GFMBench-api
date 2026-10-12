@@ -104,6 +104,7 @@ class MockGFMModel:
         self,
         sequences: List[str],
         pos: int,
+        conditional_input: Optional[np.ndarray] = None,
     ) -> np.ndarray:
         return np.full(len(sequences), pos, dtype=np.int32)
 

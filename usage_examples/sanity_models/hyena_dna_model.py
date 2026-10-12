@@ -277,7 +277,7 @@ class HyenaDNAModel(nn.Module):
             representative.detach().cpu().numpy(),
         )
 
-    def sequence_pos_to_prob_pos(self, sequences: List[str], pos: int) -> np.ndarray:
+    def sequence_pos_to_prob_pos(self, sequences: List[str], pos: int, conditional_input=None) -> np.ndarray:
         """Map DNA index ``pos`` to the token index where ``P(token)`` is stored.
 
         Probs are aligned with ``input_ids`` (P of token ``t`` at index ``t``),

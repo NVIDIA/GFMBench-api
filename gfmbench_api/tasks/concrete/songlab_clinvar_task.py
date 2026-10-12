@@ -29,6 +29,7 @@ from torch.utils.data import Dataset
 
 from gfmbench_api.tasks.base.base_gfm_zeroshot_snv_task import BaseGFMZeroShotSNVTask
 from gfmbench_api.utils.fileutils import ensure_reference_genome
+from gfmbench_api.utils.locus import GenomicLocus
 from gfmbench_api.utils.preprocutils import pad_sequence_centered_variant
 from gfmbench_api.utils.sampling_utils import diverse_sample_dataframe
 
@@ -46,6 +47,8 @@ class SonglabClinvarTask(BaseGFMZeroShotSNVTask):
     - batch_size: Batch size for dataloaders (default: 32)
     - max_num_samples: Maximum number of samples to use (default: None = use all)
     """
+
+    SUPPORTS_GENOMIC_LOCUS = True
 
     def __init__(
         self,
@@ -145,6 +148,7 @@ class SonglabClinvarTask(BaseGFMZeroShotSNVTask):
         reference_sequences = []
         variant_sequences = []
         labels = []
+        loci = []
         skipped = 0
 
         # Normalize chromosome names and types, convert labels to ints
@@ -218,6 +222,7 @@ class SonglabClinvarTask(BaseGFMZeroShotSNVTask):
                 reference_sequences.append(ref_seq)
                 variant_sequences.append(var_seq)
                 labels.append(label)
+                loci.append(GenomicLocus("GRCh38", chrom, pos_0, ref_allele, alt_allele))
 
         if skipped > 0:
             logging.warning(f"Skipped {skipped} variants due to extraction issues or allele mismatch")
@@ -235,8 +240,10 @@ class SonglabClinvarTask(BaseGFMZeroShotSNVTask):
 
         # Create dataset: (variant_sequence, reference_sequence, label, conditional_input) tuples
         test_dataset = [
-            (var_seq, ref_seq, label, np.array([]))
-            for var_seq, ref_seq, label in zip(variant_sequences, reference_sequences, self.labels)
+            (var_seq, ref_seq, label, self._conditional_input(np.array([]), locus))
+            for var_seq, ref_seq, label, locus in zip(
+                variant_sequences, reference_sequences, self.labels, loci
+            )
         ]
 
         logging.info(f"ClinVar test dataset ready with {len(test_dataset)} valid samples (Skipped/Dropped {skipped} total).")
@@ -250,5 +257,5 @@ class SonglabClinvarTask(BaseGFMZeroShotSNVTask):
         return self.max_sequence_length // 2
 
     def get_conditional_input_meta_data_frame(self) -> Optional[pd.DataFrame]:
-        """Return None as this task has no conditional metadata inputs."""
-        return None
+        """Return None unless the task emits genomic locus columns."""
+        return self._conditional_metadata(None)

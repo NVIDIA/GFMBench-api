@@ -279,7 +279,7 @@ class Evo2BioNeMoModel:
         p1 = 1.0 / (1.0 + np.exp(-llr))
         return np.stack([1.0 - p1, p1], axis=1).astype(np.float32)
 
-    def sequence_pos_to_prob_pos(self, sequences: Sequence[str], pos: int) -> np.ndarray:
+    def sequence_pos_to_prob_pos(self, sequences: Sequence[str], pos: int, conditional_input: Any = None) -> np.ndarray:
         return np.array([pos] * len(sequences))
 
 

@@ -18,7 +18,7 @@
 # - https://hgdownload.soe.ucsc.edu/goldenPath/hg38/bigZips/hg38.fa.gz — LicenseRef-UCSC-Genome-Browser
 import logging
 import os
-from typing import Optional
+from typing import Any, Callable, Optional
 
 import numpy as np
 import pandas as pd
@@ -26,6 +26,7 @@ from torch.utils.data import Dataset
 from pyfaidx import Fasta
 
 from gfmbench_api.utils.fileutils import ensure_hf_hub_file, ensure_reference_genome
+from gfmbench_api.utils.locus import GenomicLocus
 from gfmbench_api.utils.preprocutils import standardize_sequence, pad_sequence_centered_variant
 from gfmbench_api.utils.sampling_utils import diverse_sample_dataframe
 from gfmbench_api.tasks.base.base_gfm_zeroshot_snv_task import BaseGFMZeroShotSNVTask
@@ -37,10 +38,17 @@ from gfmbench_api.tasks.base.base_gfm_zeroshot_snv_task import BaseGFMZeroShotSN
 class _PathogenicOmimDataset(Dataset):
     """
     Dataset that returns (variant_sequence, reference_sequence, label, conditional_input).
-    conditional_input is None for this task (no metadata).
+    conditional_input is empty for this task unless ``conditional`` appends a locus.
     """
-    def __init__(self, df: pd.DataFrame, fasta: Fasta, seq_len: int):
+    def __init__(
+        self,
+        df: pd.DataFrame,
+        fasta: Fasta,
+        seq_len: int,
+        conditional: Optional[Callable[[Any, GenomicLocus], Any]] = None,
+    ):
         self.fasta = fasta
+        self.conditional = conditional
         self.seq_len = seq_len
         self.center = seq_len // 2
         
@@ -107,7 +115,11 @@ class _PathogenicOmimDataset(Dataset):
         
         # Return (variant_seq, ref_seq, label, conditional_input)
         # conditional_input is empty array for this task (no metadata)
-        return alt_seq, ref_seq, y, np.array([])
+        conditional_input = np.array([])
+        if self.conditional is not None:
+            locus = GenomicLocus("GRCh38", chrom, pos_0, ref_seq[self.center], alt)
+            conditional_input = self.conditional(conditional_input, locus)
+        return alt_seq, ref_seq, y, conditional_input
 
 
 
@@ -116,6 +128,8 @@ class LrbVariantEffectPathogenicOmimTask(BaseGFMZeroShotSNVTask):
     """
     LRB Pathogenic OMIM Task.
     """
+
+    SUPPORTS_GENOMIC_LOCUS = True
 
     def __init__(self, root_data_dir_path, task_config=None):
         self.reference_genome_path = os.path.join(root_data_dir_path, "reference_genome", "hg38.fa")
@@ -164,7 +178,12 @@ class LrbVariantEffectPathogenicOmimTask(BaseGFMZeroShotSNVTask):
         
         logging.info(f"[Task] Loading Genome: {self.reference_genome_path}")
         fasta = Fasta(str(self.reference_genome_path), one_based_attributes=False)
-        dataset = _PathogenicOmimDataset(df, fasta, context_len)
+        dataset = _PathogenicOmimDataset(
+            df,
+            fasta,
+            context_len,
+            conditional=self._conditional_input if self.emit_genomic_locus else None,
+        )
 
         max_samples = cfg.get("max_num_samples")
         if max_samples is not None and len(dataset.df) > max_samples:
@@ -178,5 +197,5 @@ class LrbVariantEffectPathogenicOmimTask(BaseGFMZeroShotSNVTask):
         return dataset
 
     def get_conditional_input_meta_data_frame(self) -> Optional[pd.DataFrame]:
-        """Return None as this task has no conditional metadata inputs."""
-        return None
+        """Return None unless the task emits genomic locus columns."""
+        return self._conditional_metadata(None)

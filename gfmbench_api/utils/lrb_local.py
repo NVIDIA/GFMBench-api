@@ -34,7 +34,7 @@ import logging
 import os
 import shutil
 from ast import literal_eval
-from typing import List, Optional, Tuple
+from typing import Any, Callable, List, Optional, Tuple
 
 import numpy as np
 import pandas as pd
@@ -42,6 +42,7 @@ from huggingface_hub import hf_hub_download
 from pyfaidx import Fasta
 
 from gfmbench_api.utils.fileutils import download_file_from_url
+from gfmbench_api.utils.locus import GenomicLocus
 from gfmbench_api.utils.preprocutils import standardize_sequence
 from gfmbench_api.utils.sampling_utils import diverse_sample_indices
 
@@ -108,20 +109,22 @@ def _get_chromosome(genome: Fasta, chrom):
     return None
 
 
+def _padded_window(start, sequence_length, end=None) -> Tuple[int, int]:
+    """0-based ``[start, end)`` of the window ``builder_pad_sequence`` extracts."""
+    if end:
+        pad = (sequence_length - (end - start)) // 2
+        return start - pad, end + pad + (sequence_length % 2)
+    pad = sequence_length // 2
+    return start - pad, start + pad + (sequence_length % 2)
+
+
 def builder_pad_sequence(chromosome, start, sequence_length, end=None, negative_strand=False):
     """Center+pad a region to ``sequence_length`` bp (upstream builder logic).
 
     Returns ``None`` when the padded window falls outside the chromosome, which
     is how the upstream builder drops boundary cases.
     """
-    if end:
-        pad = (sequence_length - (end - start)) // 2
-        start = start - pad
-        end = end + pad + (sequence_length % 2)
-    else:
-        pad = sequence_length // 2
-        end = start + pad + (sequence_length % 2)
-        start = start - pad
+    start, end = _padded_window(start, sequence_length, end)
 
     if start < 0 or end >= len(chromosome):
         return None
@@ -140,6 +143,8 @@ def _rows_to_examples(
     start_col: str,
     end_col: Optional[str],
     label_fn,
+    assembly: str,
+    conditional: Optional[Callable[[Any, GenomicLocus], Any]] = None,
 ) -> List[Example]:
     """Shared split->examples loop for the single-position supervised LRB tasks.
 
@@ -148,6 +153,8 @@ def _rows_to_examples(
     only examples of a class. ``label_fn(row)`` extracts the per-task label;
     ``end_col=None`` pads symmetrically around a single position (chromatin
     200bp bins) rather than around a ``[start, end)`` span (regulatory elements).
+    ``conditional(cond, locus)``, when given, builds each example's conditional
+    input from the window center on ``assembly``.
     """
     sub = df[df["split"] == split]
     examples: List[Example] = []
@@ -155,11 +162,17 @@ def _rows_to_examples(
         chrom = _get_chromosome(genome, row["CHROM"])
         if chrom is None:
             continue
+        start = int(row[start_col]) - 1
         end = int(row[end_col]) - 1 if end_col else None
-        seq = builder_pad_sequence(chrom, int(row[start_col]) - 1, seq_len, end=end)
+        seq = builder_pad_sequence(chrom, start, seq_len, end=end)
         if not seq:
             continue
-        examples.append((standardize_sequence(seq), label_fn(row), _EMPTY_COND))
+        cond = _EMPTY_COND
+        if conditional is not None:
+            window_start, _ = _padded_window(start, seq_len, end)
+            locus = GenomicLocus(assembly, str(row["CHROM"]), window_start + seq_len // 2)
+            cond = conditional(cond, locus)
+        examples.append((standardize_sequence(seq), label_fn(row), cond))
     if n is not None and len(examples) > n:
         indices = diverse_sample_indices(
             [example[1] for example in examples], n
@@ -178,6 +191,7 @@ def build_regulatory_examples(
     element: str,
     subset: bool = True,
     max_num_samples: Optional[int] = None,
+    conditional: Optional[Callable[[Any, GenomicLocus], Any]] = None,
 ) -> Tuple[List[Example], List[Example]]:
     """Return ``(train_examples, test_examples)`` for a regulatory-element task."""
     suffix = "_subset.csv" if subset else ".csv"
@@ -185,16 +199,17 @@ def build_regulatory_examples(
     df = pd.read_csv(csv_path)
     genome = Fasta(ensure_assembly_genome(genome_dir, "hg38"), one_based_attributes=False)
 
-    train = _regulatory_split(df, "train", genome, sequence_length, max_num_samples)
-    test = _regulatory_split(df, "test", genome, sequence_length, max_num_samples)
+    train = _regulatory_split(df, "train", genome, sequence_length, max_num_samples, conditional)
+    test = _regulatory_split(df, "test", genome, sequence_length, max_num_samples, conditional)
     return train, test
 
 
-def _regulatory_split(df, split, genome, seq_len, n) -> List[Example]:
+def _regulatory_split(df, split, genome, seq_len, n, conditional=None) -> List[Example]:
     return _rows_to_examples(
         df, split, genome, seq_len, n,
         start_col="START", end_col="STOP",
         label_fn=lambda row: int(row["label"]),
+        assembly="GRCh38", conditional=conditional,
     )
 
 
@@ -208,6 +223,7 @@ def build_chromatin_examples(
     feature: str,
     subset: bool = True,
     max_num_samples: Optional[int] = None,
+    conditional: Optional[Callable[[Any, GenomicLocus], Any]] = None,
 ) -> Tuple[List[Example], List[Example]]:
     """Return ``(train_examples, test_examples)`` for a chromatin-features task."""
     suffix = "_subset.csv" if subset else ".csv"
@@ -216,17 +232,18 @@ def build_chromatin_examples(
     label_col = "HISTONES" if "histone" in feature else "DNASE"
     genome = Fasta(ensure_assembly_genome(genome_dir, "hg19"), one_based_attributes=False)
 
-    train = _chromatin_split(df, "train", genome, sequence_length, label_col, max_num_samples)
-    test = _chromatin_split(df, "test", genome, sequence_length, label_col, max_num_samples)
+    train = _chromatin_split(df, "train", genome, sequence_length, label_col, max_num_samples, conditional)
+    test = _chromatin_split(df, "test", genome, sequence_length, label_col, max_num_samples, conditional)
     return train, test
 
 
-def _chromatin_split(df, split, genome, seq_len, label_col, n) -> List[Example]:
+def _chromatin_split(df, split, genome, seq_len, label_col, n, conditional=None) -> List[Example]:
     # Centered on the annotated 200bp bin (no explicit end -> symmetric pad).
     return _rows_to_examples(
         df, split, genome, seq_len, n,
         start_col="POS", end_col=None,
         label_fn=lambda row: np.asarray(literal_eval(row[label_col]), dtype=np.float32),
+        assembly="GRCh37", conditional=conditional,
     )
 
 

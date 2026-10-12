@@ -36,6 +36,8 @@ class LRBHistoneMarksTask(BaseGFMSupervisedSingleSeqTask):
     label is a 20-length binary vector. Train = chr1-7,10-22; test = chr8,9.
     """
 
+    SUPPORTS_GENOMIC_LOCUS = True
+
     # DeepSea histone subset used by LRB; the actual count is read from the data
     # in _create_datasets, this is only the fallback before materialization.
     DEFAULT_NUM_TRACKS = 20
@@ -69,6 +71,7 @@ class LRBHistoneMarksTask(BaseGFMSupervisedSingleSeqTask):
             feature="histone",
             subset=subset,
             max_num_samples=self.max_num_samples,
+            conditional=self._conditional_input if self.emit_genomic_locus else None,
         )
         sample = train_dataset[0] if train_dataset else (test_dataset[0] if test_dataset else None)
         if sample is not None:
@@ -76,5 +79,5 @@ class LRBHistoneMarksTask(BaseGFMSupervisedSingleSeqTask):
         return train_dataset, None, test_dataset
 
     def get_conditional_input_meta_data_frame(self) -> Optional[pd.DataFrame]:
-        """Return None as this task has no conditional metadata inputs."""
-        return None
+        """Return None unless the task emits genomic locus columns."""
+        return self._conditional_metadata(None)

@@ -147,6 +147,7 @@ class BaseGFMZeroShotTask(BaseGFMTask):
                 'variant_repr': variant_repr_np,
                 'reference_repr': reference_repr_np,
                 'labels': labels,
+                'conditional_input': conditional_input,
             }
 
             # Update common metrics using their specified argument keys
