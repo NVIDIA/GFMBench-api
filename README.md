@@ -146,6 +146,7 @@ Simply implement the methods below in your model class; inheritance is **not** r
 |:-------------------------------------------------------------------------------------|:------------------------------------------|
 | `infer_sequence_to_labels_probs(sequences, ...)`                                     | Returns single-label, binary multi-label, or multi-class multi-label probabilities for sequences. |
 | `infer_variant_ref_sequences_to_labels_probs(variant_sequences, ref_sequences, ...)`  | Returns the same classification probability layouts for variant/reference sequence pairs. |
+| `infer_sequence_to_regression_outputs(sequences, ...)`                              | Returns regression predictions (final head outputs) for sequences, per sequence or per bin. Implemented by models that own a regression head, e.g. the `GFMWithProjection` wrapper in `usage_examples/trainers`; not part of `BaseGFMModel`. |
 | `infer_sequence_to_sequence(sequences, ...)`                                         | Takes a list of DNA sequences and returns per-nucleotide probabilities, per-position embeddings, and a single sequence-level embedding. |
 | `sequence_pos_to_prob_pos(sequences, pos)`                                           | Takes a list of DNA sequences and a position index, returns the corresponding output position indices accounting for tokenization differences. |
 | `infer_masked_sequence_to_token_probs(sequences, variant_pos, variant_letters, reference_letters, ...)` | Takes sequences and masks the variant position, returns probabilities for the variant and reference nucleotides at the masked position. |
@@ -155,7 +156,7 @@ Classification probabilities use shape `[batch, classes]` for single-label tasks
 for multi-class multi-label tasks.
 
 - Any not-implemented methods can simply return `None` and metrics depending on them will be skipped.
-- See `gfmbench_api/tasks/base/base_gfm_model.py` for detailed docstrings.
+- See `gfmbench_api/tasks/base/base_gfm_model.py` for detailed docstrings, and the docstring of `BaseGFMSupervisedRegressionTask` for the regression output contract.
 - Step-by-step tutorial (mock model → NTv3 8M, BEND + GUE): [`usage_examples/add_new_model_tutorial.ipynb`](usage_examples/add_new_model_tutorial.ipynb).
 
 ### Isolated model environments
@@ -410,8 +411,11 @@ Choose the appropriate base class based on your task:
   single-label classification; multiple labels are independent classification targets.
 
 - **Supervised Regression**: Inherit from `BaseGFMSupervisedRegressionTask`
-  - Implement `is_spatial_binned()` to return `True` for binned outputs or
-    `False` for sequence-level outputs
+  - Implement `get_bin_size_bp()` to return the bin size in bp for binned outputs or
+    `None` for sequence-level outputs. The `num_bins` task attribute is derived as
+    `max_sequence_length // bin_size_bp` (1 for sequence-level tasks).
+    This replaces `is_spatial_binned()` and the `output_spatiality` attribute;
+    consumers can use `num_bins > 1` to identify binned outputs.
   
 - **Zero-Shot SNV Variant Effect**: Inherit from `BaseGFMZeroShotSNVTask`
   - For zero-shot evaluation of single-nucleotide variants (SNVs) with equal-length reference and variant sequences
@@ -441,7 +445,7 @@ Additional methods for supervised classification tasks:
 Additional methods for supervised regression tasks:
 
 5. **`_get_num_labels() -> int`**: Return the number of continuous labels per sequence or bin
-6. **`is_spatial_binned() -> bool`**: Return whether outputs include a spatial bin dimension
+6. **`get_bin_size_bp() -> Optional[int]`**: Return the bin size in bp for binned outputs (`[batch, num_bins, num_labels]`), or `None` for sequence-level outputs (`[batch, num_labels]`). `max_sequence_length` must be an exact multiple of the bin size and yield at least 2 bins.
 
 Additional methods for zero-shot tasks:
 

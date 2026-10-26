@@ -152,10 +152,11 @@ class BaseGFMTask(ABC):
             "task_type": [str] - prediction objective, such as "classification",
                 or "regression" (supervised tasks)
             "classification_mode": [str] - "single_label" or "multi_label"
-                (only for classification tasks)
+                (regression tasks report "single_label")
             "num_labels": [int] - number of labels for a supervised task
             "num_classes": [int] - number of classes per classification target
-            "output_spatiality": [str] - "sequence" or "binned" (only for regression tasks)
+            "num_bins": [int] - number of output bins per sequence for regression tasks
+                (1 = sequence-level output [B, L]; >= 2 = binned output [B, num_bins, L])
             "is_variant_effect_prediction": [bool] - whether a task predicts variant effects
             "is_snv_only_variants": [bool] - whether this task uses only SNV variants (only for zero-shot variant tasks)
             "conditional_input_metadata": [Optional[pd.DataFrame]] - metadata schema for conditional inputs,

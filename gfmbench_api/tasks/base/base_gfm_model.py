@@ -56,21 +56,6 @@ class BaseGFMModel(ABC):
         """
         pass
 
-    def infer_sequence_to_regression(
-        self,
-        sequences: List[str],
-        conditional_input: Optional[np.ndarray] = None,
-    ) -> Optional[np.ndarray]:
-        """Return continuous predictions for a supervised regression task.
-
-        The task's ``output_spatiality`` determines the expected shape:
-        ``[batch_size, num_outputs]`` for sequence-level regression or
-        ``[batch_size, num_bins, num_outputs]`` for binned regression.
-
-        Models without a fitted regression head may return ``None``.
-        """
-        return None
-
     @abstractmethod
     def infer_sequence_to_sequence(
         self, 
