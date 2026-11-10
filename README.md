@@ -255,6 +255,11 @@ python usage_examples/run_benchmark.py \
     --csv_path results/linear_probe_results.csv
 ```
 
+For Evo2 inference, `--compact_outputs` keeps metric reductions on the GPU and
+copies only probabilities, representative embeddings, and any requested SNV
+position embeddings to the CPU. The option is off by default and leaves the
+full `infer_sequence_to_sequence` API available to other callers.
+
 Disable inference cache:  
 ```bash
 python usage_examples/run_benchmark.py \

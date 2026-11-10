@@ -184,6 +184,10 @@ def parse_args(argv=None):
         help="Model to use for benchmarking",
     )
     parser.add_argument(
+        "--compact_outputs", action="store_true",
+        help="For Evo2, transfer only metric inputs instead of full sequence embeddings",
+    )
+    parser.add_argument(
         "--epochs",
         type=int,
         default=3,
@@ -295,9 +299,13 @@ def main(argv=None):
 
     if args.model == "Evo2" and not args.linear_prob:
         raise ValueError("Evo2 does not support full fine-tuning. Use --linear_prob for Evo2 benchmarks.")
+    if args.compact_outputs and args.model != "Evo2":
+        raise ValueError("--compact_outputs is currently supported only for Evo2")
     ModelClass = get_model_class(args.model)
     max_length = MODEL_REGISTRY[args.model]["max_length"]
-    model_init_kwargs = MODEL_REGISTRY[args.model].get("model_kwargs", {})
+    model_init_kwargs = dict(MODEL_REGISTRY[args.model].get("model_kwargs", {}))
+    if args.compact_outputs:
+        model_init_kwargs["compact_outputs"] = True
     
     logging.info(f"Model: {args.model}, Max sequence length: {max_length}")
     
