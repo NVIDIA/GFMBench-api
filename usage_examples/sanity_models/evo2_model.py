@@ -41,7 +41,7 @@ from __future__ import annotations
 import logging
 import os
 from pathlib import Path
-from typing import Any, Optional, Sequence
+from typing import Any, Sequence
 
 import numpy as np
 import torch
@@ -99,9 +99,11 @@ class Evo2BioNeMoModel:
         ckpt_tag: str = "evo2/1b-8k-bf16:1.0",
         max_length: int = 8192,
         device: str = "cuda",
+        compact_outputs: bool = False,
     ) -> None:
         self.max_length = max_length
         self.device = torch.device(device)
+        self.compact_outputs = compact_outputs
         if self.device.type != "cuda":
             raise ValueError("Evo2BioNeMoModel requires a CUDA device.")
 
@@ -244,6 +246,50 @@ class Evo2BioNeMoModel:
         if rep is None:
             raise ValueError("Representative is None")
         return probs_np, embs_np, rep
+
+    def infer_sequence_to_metrics(
+        self, sequences: Sequence[str], conditional_input: Any = None,
+        position: int | None = None,
+    ) -> tuple[np.ndarray, np.ndarray | None, np.ndarray]:
+        """Return only the outputs used by zero-shot metrics.
+
+        The optional selected embeddings have shape [batch, 1, hidden] so the
+        caller can use the existing position metric without transferring the
+        full sequence embeddings to the CPU.
+        """
+        sequences = [str(sequence) for sequence in sequences]
+        logits, embeddings, mask, token_ids = self._forward(sequences)
+        if embeddings is None:
+            raise ValueError("Embeddings are None")
+
+        batch, length = mask.shape
+        input_ids = torch.zeros(batch, length, dtype=torch.long, device=self.device)
+        for index, ids in enumerate(token_ids):
+            input_ids[index, :len(ids)] = torch.as_tensor(ids, dtype=torch.long, device=self.device)
+        probabilities = self._score(logits, input_ids, mask)
+        weights = mask.float().unsqueeze(-1)
+        representative = (embeddings * weights).sum(1) / weights.sum(1)
+
+        selected = None
+        if position is not None:
+            positions = np.asarray(self.sequence_pos_to_prob_pos(sequences, position))
+            if positions.shape != (batch,):
+                raise ValueError("Position mapping must return one index per sequence")
+            if np.any(positions >= length):
+                raise ValueError("Position mapping exceeds the model output length")
+            valid = (positions >= 0) & (positions < length)
+            safe_positions = torch.as_tensor(np.where(valid, positions, 0), device=self.device)
+            selected = embeddings[torch.arange(batch, device=self.device), safe_positions]
+            selected = selected.cpu().numpy()[:, None, :]
+            selected[~valid] = 0
+
+        return probabilities.cpu().numpy(), selected, representative.cpu().numpy()
+
+    def infer_representative(
+        self, sequences: Sequence[str], conditional_input: Any = None,
+    ) -> torch.Tensor:
+        """Keep the projected representation on the GPU for supervised tasks."""
+        return self._sequence_to_representative(sequences)
 
     def _sequence_to_representative(self, sequences: Sequence[str]) -> torch.Tensor:
         """Return representative embeddings as torch tensors for projection training."""

@@ -60,6 +60,12 @@ class GFMWithProjection(BaseGFMModel):
         """Clear cached reference-sequence inference (call after each benchmark task)."""
         self._ref_cache.clear()
 
+    def _compact_representative(self):
+        if not getattr(self.base_model, "compact_outputs", False):
+            return None
+        method = getattr(self.base_model, "infer_representative", None)
+        return method if callable(method) else None
+
     def _logits_to_probs(self, logits: torch.Tensor) -> np.ndarray:
         """Convert projection logits to the task's classification probability layout."""
         if self.num_labels == 1:
@@ -83,8 +89,11 @@ class GFMWithProjection(BaseGFMModel):
             Classification probabilities if the projection layer exists, otherwise
             sequence representative embeddings of shape [batch_size, hidden_dim].
         """
-        # Get embeddings from base model using infer_sequence_to_sequence
-        _, _, sequence_repr_np = self.base_model.infer_sequence_to_sequence(sequences, conditional_input)
+        compact_representative = self._compact_representative()
+        if compact_representative is not None:
+            sequence_repr_np = compact_representative(sequences, conditional_input)
+        else:
+            _, _, sequence_repr_np = self.base_model.infer_sequence_to_sequence(sequences, conditional_input)
         
         if sequence_repr_np is None:
             return None
@@ -92,11 +101,12 @@ class GFMWithProjection(BaseGFMModel):
         # Apply projection layer if it exists
         if self.projection_layer is not None:
             with torch.no_grad():
-                sequence_repr = torch.from_numpy(sequence_repr_np).to(self.device)
+                sequence_repr = torch.as_tensor(sequence_repr_np, device=self.device)
                 logits = self.projection_layer(sequence_repr)
                 return self._logits_to_probs(logits)
         else:
-            return sequence_repr_np
+            return (sequence_repr_np.cpu().numpy() if torch.is_tensor(sequence_repr_np)
+                    else sequence_repr_np)
     
     def infer_sequence_to_sequence(self, sequences: List[str], conditional_input=None) -> Tuple[Optional[np.ndarray], Optional[np.ndarray], Optional[np.ndarray]]:
         """
@@ -206,16 +216,22 @@ class GFMWithProjection(BaseGFMModel):
         Returns:
             Classification probabilities if the projection layer exists, otherwise None.
         """
-        # Get representative embeddings from base model using infer_sequence_to_sequence
-        _, _, var_repr_np = self.base_model.infer_sequence_to_sequence(
-            variant_sequences, conditional_input
-        )
-        _, _, ref_repr_np = self._ref_cache.cached_call(
-            self.base_model.infer_sequence_to_sequence,
-            ref_sequences,
-            conditional_input,
-            disable=self.cache_size == 0,
-        )
+        compact_representative = self._compact_representative()
+        if compact_representative is not None:
+            var_repr_np = compact_representative(variant_sequences, conditional_input)
+            ref_repr_np = self._ref_cache.cached_call(
+                compact_representative, ref_sequences, conditional_input,
+                disable=self.cache_size == 0,
+            )
+        else:
+            _, _, var_repr_np = self.base_model.infer_sequence_to_sequence(
+                variant_sequences, conditional_input
+            )
+            _, _, ref_repr_np = self._ref_cache.cached_call(
+                self.base_model.infer_sequence_to_sequence,
+                ref_sequences, conditional_input,
+                disable=self.cache_size == 0,
+            )
         
         if var_repr_np is None or ref_repr_np is None:
             return None
@@ -223,8 +239,8 @@ class GFMWithProjection(BaseGFMModel):
         # Apply projection layer if it exists
         if self.projection_layer is not None:
             with torch.no_grad():
-                var_repr = torch.from_numpy(var_repr_np).to(self.device)
-                ref_repr = torch.from_numpy(ref_repr_np).to(self.device)
+                var_repr = torch.as_tensor(var_repr_np, device=self.device)
+                ref_repr = torch.as_tensor(ref_repr_np, device=self.device)
                 
                 # Combine embeddings - concatenate variant and ref representations
                 # Shape: [batch_size, hidden_dim * 2]

@@ -255,6 +255,14 @@ python usage_examples/run_benchmark.py \
     --csv_path results/linear_probe_results.csv
 ```
 
+Benchmark tasks use compact outputs by default when the model adapter supplies
+`infer_sequence_to_metrics` (zero-shot) or `infer_representative` (supervised).
+Currently Evo2 supplies both methods. It copies only probabilities,
+representative embeddings, and any requested SNV position embeddings to the
+CPU. Pass `--full_outputs` when a task needs full sequence embeddings. The full
+`infer_sequence_to_sequence` API remains available to other callers; explicit
+`--compact_outputs` commands still work for supported adapters.
+
 Disable inference cache:  
 ```bash
 python usage_examples/run_benchmark.py \

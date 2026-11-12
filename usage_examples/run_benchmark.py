@@ -150,6 +150,17 @@ def get_model_class(model_name: str):
         raise ImportError(f"Failed to import {model_name} from {spec['module']}") from exc
 
 
+def select_compact_outputs(model, *, supervised: bool, requested: bool | None) -> bool:
+    """Use compact task outputs when this adapter provides the needed method."""
+    method = "infer_representative" if supervised else "infer_sequence_to_metrics"
+    supported = callable(getattr(model, method, None))
+    if requested is True and not supported:
+        raise ValueError(f"{type(model).__name__} does not implement {method}")
+    if supported:
+        model.compact_outputs = requested is not False
+    return supported and requested is not False
+
+
 def parse_args(argv=None):
     parser = argparse.ArgumentParser(description="Run benchmark tasks on a model")
     parser.add_argument(
@@ -183,6 +194,16 @@ def parse_args(argv=None):
         choices=list(MODEL_REGISTRY.keys()),
         help="Model to use for benchmarking",
     )
+    output_group = parser.add_mutually_exclusive_group()
+    output_group.add_argument(
+        "--compact_outputs", dest="compact_outputs", action="store_true",
+        help="Require compact task outputs (the default when supported)",
+    )
+    output_group.add_argument(
+        "--full_outputs", dest="compact_outputs", action="store_false",
+        help="Use full sequence embeddings in benchmark tasks",
+    )
+    parser.set_defaults(compact_outputs=None)
     parser.add_argument(
         "--epochs",
         type=int,
@@ -297,7 +318,7 @@ def main(argv=None):
         raise ValueError("Evo2 does not support full fine-tuning. Use --linear_prob for Evo2 benchmarks.")
     ModelClass = get_model_class(args.model)
     max_length = MODEL_REGISTRY[args.model]["max_length"]
-    model_init_kwargs = MODEL_REGISTRY[args.model].get("model_kwargs", {})
+    model_init_kwargs = dict(MODEL_REGISTRY[args.model].get("model_kwargs", {}))
     
     logging.info(f"Model: {args.model}, Max sequence length: {max_length}")
     
@@ -377,6 +398,9 @@ def main(argv=None):
 
         # Reinitialize model for each task to start fresh
         model = ModelClass(device=device, max_length=max_length, **model_init_kwargs)
+        select_compact_outputs(
+            model, supervised=has_finetuning_data, requested=args.compact_outputs,
+        )
         if checkpoint_path:
             logging.info(f"Loading checkpoint: {checkpoint_path}")
             model.load_checkpoint(checkpoint_path)
