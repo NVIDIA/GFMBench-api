@@ -93,7 +93,7 @@ def test_zero_shot_compact_matches_full_outputs(fixtures_root, smoke_task_config
 
     assert actual.keys() == expected.keys()
     for name, value in expected.items():
-        assert actual[name] == pytest.approx(value), name
+        assert actual[name] == value, name
     assert compact.compact_calls > 0
     assert compact.full_calls == 0
 
