@@ -1,7 +1,7 @@
 # SPDX-FileCopyrightText: Copyright (c) 2026 NVIDIA CORPORATION & AFFILIATES. All rights reserved.
 # SPDX-License-Identifier: Apache-2.0
 
-"""The optional compact path preserves task scores without full CPU hidden arrays."""
+"""Compact Evo2 task outputs preserve scores without full CPU hidden arrays."""
 
 import ast
 from pathlib import Path
@@ -13,6 +13,7 @@ import torch
 import torch.nn.functional as F
 
 from tests.e2e.fixture_tasks import FixtureZeroShotIndelTask, FixtureZeroShotSNVTask
+from usage_examples.run_benchmark import parse_args, select_compact_outputs
 from usage_examples.trainers.model_wrapper import GFMWithProjection
 
 
@@ -42,8 +43,6 @@ class SequenceModel:
 
 
 class CompactSequenceModel(SequenceModel):
-    compact_outputs = True
-
     def infer_sequence_to_metrics(self, sequences, conditional_input=None, position=None):
         self.compact_calls += 1
         probs, hidden, representative = self._outputs(sequences)
@@ -51,11 +50,43 @@ class CompactSequenceModel(SequenceModel):
         return probs, selected, representative
 
 
+def test_benchmark_selects_compact_for_supported_tasks_by_default():
+    base = ['--csv_path', '/tmp/report.csv', '--root_data_dir_path', '/tmp/data',
+            '--model', 'Evo2', '--linear_prob']
+    class SupportedModel:
+        def infer_sequence_to_metrics(self, sequences, conditional_input=None, position=None):
+            return None
+
+        def infer_representative(self, sequences, conditional_input=None):
+            return None
+
+    for flags, expected in [([], True), (['--compact_outputs'], True),
+                            (['--full_outputs'], False)]:
+        args = parse_args(base + flags)
+        for supervised in [False, True]:
+            model = SupportedModel()
+            assert select_compact_outputs(
+                model, supervised=supervised, requested=args.compact_outputs,
+            ) is expected
+            assert model.compact_outputs is expected
+    with pytest.raises(SystemExit):
+        parse_args(base + ['--compact_outputs', '--full_outputs'])
+
+    class FullOnlyModel:
+        pass
+
+    model = FullOnlyModel()
+    assert select_compact_outputs(model, supervised=False, requested=None) is False
+    with pytest.raises(ValueError, match='infer_sequence_to_metrics'):
+        select_compact_outputs(model, supervised=False, requested=True)
+
+
 @pytest.mark.parametrize('task_type', [FixtureZeroShotSNVTask, FixtureZeroShotIndelTask])
 def test_zero_shot_compact_matches_full_outputs(fixtures_root, smoke_task_config, task_type):
     task = task_type(str(fixtures_root), smoke_task_config)
     original = SequenceModel()
     compact = CompactSequenceModel()
+    select_compact_outputs(compact, supervised=False, requested=None)
 
     expected = task.eval_test_set(original)
     actual = task.eval_test_set(compact)
@@ -67,7 +98,7 @@ def test_zero_shot_compact_matches_full_outputs(fixtures_root, smoke_task_config
     assert compact.full_calls == 0
 
     disabled = CompactSequenceModel()
-    disabled.compact_outputs = False
+    select_compact_outputs(disabled, supervised=False, requested=False)
     task.eval_test_set(disabled)
     assert disabled.full_calls > 0
     assert disabled.compact_calls == 0
@@ -76,7 +107,6 @@ def test_zero_shot_compact_matches_full_outputs(fixtures_root, smoke_task_config
 def test_projection_uses_compact_representative_without_full_outputs():
     class RepresentativeModel:
         device = 'cpu'
-        compact_outputs = True
 
         def infer_representative(self, sequences, conditional_input=None):
             return torch.tensor([[len(sequence), 1.] for sequence in sequences])
@@ -87,13 +117,15 @@ def test_projection_uses_compact_representative_without_full_outputs():
     projection = torch.nn.Linear(2, 2, bias=False)
     with torch.no_grad():
         projection.weight.copy_(torch.eye(2))
-    wrapped = GFMWithProjection(RepresentativeModel(), projection, cache_size=0.01)
+    model = RepresentativeModel()
+    select_compact_outputs(model, supervised=True, requested=None)
+    wrapped = GFMWithProjection(model, projection, cache_size=0.01)
 
     single = wrapped.infer_sequence_to_labels_probs(['AC', 'ACG'])
     pair_projection = torch.nn.Linear(4, 2, bias=False)
-    paired_wrapper = GFMWithProjection(RepresentativeModel(), pair_projection, cache_size=0.01)
+    paired_wrapper = GFMWithProjection(model, pair_projection, cache_size=0.01)
     paired = paired_wrapper.infer_variant_ref_sequences_to_labels_probs(['AC', 'ACG'], ['AC', 'AC'])
-    unprojected = GFMWithProjection(RepresentativeModel()).infer_sequence_to_labels_probs(['AC'])
+    unprojected = GFMWithProjection(model).infer_sequence_to_labels_probs(['AC'])
 
     assert single.shape == (2, 2)
     assert paired.shape == (2, 2)
