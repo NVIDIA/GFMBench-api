@@ -130,11 +130,6 @@ def _dispatch(method: str, args: dict, rng):
         logits = rng.standard_normal((n, k))
         return _softmax_rows(logits).tolist()
 
-    if method == "infer_sequence_to_regression":
-        n = len(args["sequences"])
-        num_outputs = int(args.get("num_outputs", 1))
-        return rng.standard_normal((n, num_outputs)).tolist()
-
     raise ValueError(f"Unknown worker method: {method}")
 
 
@@ -355,17 +350,6 @@ class IsolatedMockModel(BaseGFMModel):
                 "ref_sequences": list(ref_sequences),
                 "num_labels": self.num_labels,
             },
-        )
-        return self._as_array(resp["result"])
-
-    def infer_sequence_to_regression(
-        self,
-        sequences: List[str],
-        conditional_input: Optional[np.ndarray] = None,
-    ) -> Optional[np.ndarray]:
-        resp = self._call(
-            "infer_sequence_to_regression",
-            {"sequences": list(sequences), "num_outputs": 1},
         )
         return self._as_array(resp["result"])
 

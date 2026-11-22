@@ -44,11 +44,13 @@ from torch.utils.data import DataLoader
 from gfmbench_api.utils import logutils
 
 from gfmbench_api.benchmark_report import BenchmarkReport
+from gfmbench_api.tasks.base.base_gfm_supervised_regression_task import BaseGFMSupervisedRegressionTask
 from gfmbench_api.tasks.concrete.bend_vep_disease_task import BendVEPDisease
 from gfmbench_api.tasks.concrete.bend_vep_expression_task import BendVEPExpression
 from gfmbench_api.tasks.concrete.gue_promoter_all_task import GuePromoterAllTask
 from gfmbench_api.tasks.concrete.gue_splice_site_task import GueSpliceSiteTask
 from gfmbench_api.tasks.concrete.gue_tf_all_task import GueTranscriptionFactorTask
+from gfmbench_api.tasks.concrete.lrb_cage_task import LRBCagePredictionTask
 from gfmbench_api.tasks.concrete.lrb_causal_eqtl_task import LRBCausalEqtlTask
 from gfmbench_api.tasks.concrete.lrb_enhancer_task import LRBEnhancerTask
 from gfmbench_api.tasks.concrete.lrb_histone_marks_task import LRBHistoneMarksTask
@@ -77,6 +79,7 @@ TASK_REGISTRY: dict[str, type] = {
     "lrb_variant_effect_pathogenic_omim": LrbVariantEffectPathogenicOmimTask,
     "lrb_regulatory_element_enhancer":   LRBEnhancerTask,
     "lrb_chromatin_features_histone_marks": LRBHistoneMarksTask,
+    "lrb_cage_prediction":               LRBCagePredictionTask,
     "bend_variant_effects_disease":       BendVEPDisease,
     "bend_variant_effects_expression":    BendVEPExpression,
     "gue_promoter_all":                   GuePromoterAllTask,
@@ -295,6 +298,13 @@ def main(argv=None):
 
     if args.model == "Evo2" and not args.linear_prob:
         raise ValueError("Evo2 does not support full fine-tuning. Use --linear_prob for Evo2 benchmarks.")
+    if not args.linear_prob:
+        for name, cls in TASK_REGISTRY.items():
+            if name not in args.exclude_tasks and issubclass(cls, BaseGFMSupervisedRegressionTask):
+                raise ValueError(
+                    f"{name} is a regression task, which supports only a frozen backbone. "
+                    "Use --linear_prob or --exclude_tasks."
+                )
     ModelClass = get_model_class(args.model)
     max_length = MODEL_REGISTRY[args.model]["max_length"]
     model_init_kwargs = MODEL_REGISTRY[args.model].get("model_kwargs", {})
@@ -384,19 +394,25 @@ def main(argv=None):
         if has_finetuning_data:
             hidden_dim = model.get_hidden_dim()
             task_type = task_attrs["task_type"]
-            if task_type != "classification":
+            if task_type not in ("classification", "regression"):
                 raise NotImplementedError(
-                    "The usage-example fine-tuner currently supports classification only."
+                    f"The usage-example fine-tuner does not support task_type={task_type!r}."
                 )
+            num_labels = task_attrs["num_labels"]
             classification_mode = task_attrs["classification_mode"]
             is_variant_effect = task_attrs["is_variant_effect_prediction"]
-            num_labels = task_attrs["num_labels"]
-            num_classes = task_attrs["num_classes"]
-            num_outputs = (
-                num_classes
-                if num_labels == 1
-                else num_labels if num_classes == 2 else num_labels * num_classes
-            )
+            if task_type == "regression":
+                num_classes = 1
+                num_outputs = num_labels
+                num_bins = task_attrs["num_bins"]
+            else:
+                num_classes = task_attrs["num_classes"]
+                num_outputs = (
+                    num_classes
+                    if num_labels == 1
+                    else num_labels if num_classes == 2 else num_labels * num_classes
+                )
+                num_bins = 1
             
             train_dataset = task.get_finetune_dataset()
 
@@ -426,6 +442,8 @@ def main(argv=None):
                 num_classes=num_classes,
                 is_variant_effect_prediction=is_variant_effect,
                 cache_size=args.cache_size,
+                task_type=task_type,
+                num_bins=num_bins,
                 device=device
             )
             

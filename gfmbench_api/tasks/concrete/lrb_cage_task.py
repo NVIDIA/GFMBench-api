@@ -45,43 +45,46 @@ class LRBCagePredictionTask(BaseGFMSupervisedRegressionTask):
     BIN_SIZE_BP = 128
     BUILDER_MAX_LENGTH = 114688  # 896 bins x 128bp (full Basenji/Enformer window)
     DEFAULT_NUM_TRACKS = 50
+
     def _get_default_max_seq_len(self) -> int:
         return self.BUILDER_MAX_LENGTH
 
     def _get_num_labels(self) -> int:
         return getattr(self, "_num_tracks", self.DEFAULT_NUM_TRACKS)
 
-    def is_spatial_binned(self) -> bool:
-        return True
+    def get_bin_size_bp(self) -> int:
+        """Return the CAGE output bin width in base pairs."""
+        return self.BIN_SIZE_BP
 
     def get_task_name(self) -> str:
         return "lrb_cage_prediction"
 
-    def _resolve_cage_sequence_length(self) -> int:
+    def _get_max_sequence_length(self) -> int:
         """Round the effective window down to an even multiple of 128bp.
 
-        Labels are symmetric 128bp bins (``(num_bins) % 2 == 0`` upstream), so a
-        model max length such as 2500 must be snapped down to a valid window.
+        Labels are symmetric 128bp bins (even bin count upstream), so unlike the base
+        ``min(task default, config value)`` rule, a configured length such as 2500 is
+        snapped down (to 2304). The generic divisibility check lives in
+        ``BaseGFMSupervisedRegressionTask._get_num_bins``; only evenness is CAGE-specific.
         """
-        bins = self.max_sequence_length // self.BIN_SIZE_BP
+        max_sequence_length = super()._get_max_sequence_length()
+        bins = max_sequence_length // self.BIN_SIZE_BP
+        bins -= bins % 2
         if bins < 2:
             raise ValueError(
                 f"CAGE requires at least 2 bins (256bp); effective max length "
-                f"{self.max_sequence_length} yields {bins} bins."
+                f"{max_sequence_length} yields {bins} usable bins."
             )
-        if bins % 2 != 0:
-            bins -= 1
-        self._num_bins = bins
         return bins * self.BIN_SIZE_BP
 
     def _create_datasets(self) -> Tuple[Optional[Dataset], Optional[Dataset], Dataset]:
         cache_dir = os.path.join(self.root_data_dir_path, self.get_task_name())
         genome_dir = os.path.join(self.root_data_dir_path, "reference_genome")
-        seq_len = self._resolve_cage_sequence_length()
+        seq_len = self.max_sequence_length
         logging.info(
             "Building LRB CAGE (sequence_length=%d, num_bins=%d)...",
             seq_len,
-            self._num_bins,
+            seq_len // self.BIN_SIZE_BP,
         )
         train_examples, validation_examples, test_examples = build_cage_examples(
             cache_dir=cache_dir,
