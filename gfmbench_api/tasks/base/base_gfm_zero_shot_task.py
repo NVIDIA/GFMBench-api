@@ -120,21 +120,28 @@ class BaseGFMZeroShotTask(BaseGFMTask):
         additional_metrics = self._get_additional_metrics()
 
         ref_cache = SequenceInferenceCache(max_size_gb=self.cache_size)
+        compact = bool(getattr(model, 'compact_outputs', False)) and callable(
+            getattr(model, 'infer_sequence_to_metrics', None)
+        )
+        method = 'infer_sequence_to_metrics' if compact else 'infer_sequence_to_sequence'
+        position = self._get_variant_position_in_sequence() if compact and self._is_snv_only() else None
         for batch_data in tqdm(data_loader, desc="Evaluating (Zero-Shot)"):
             variant_sequences, reference_sequences, labels, conditional_input = batch_data
 
-            # Get sequence-to-sequence outputs for both variant and reference
-            # Returns: (sequence_probs, sequence_embeddings, sequence_representative)
+            # The opt-in method returns (probabilities, selected embeddings,
+            # representative). Selected embeddings have shape [batch, 1, hidden]
+            # for SNVs; other tasks need no per-position embeddings.
+            model_args = (conditional_input, position) if compact else (conditional_input,)
             variant_probs_np, variant_embeddings_np, variant_repr_np = self._safe_model_call(
-                model, 'infer_sequence_to_sequence', variant_sequences, conditional_input, num_outputs=3
+                model, method, variant_sequences, *model_args, num_outputs=3
             )
             infer_ref = partial(
-                self._safe_model_call, model, 'infer_sequence_to_sequence', num_outputs=3
+                self._safe_model_call, model, method, num_outputs=3
             )
             reference_probs_np, reference_embeddings_np, reference_repr_np = ref_cache.cached_call(
                 infer_ref,
                 reference_sequences,
-                conditional_input,
+                *model_args,
                 disable=(self.cache_size == 0) or not self.use_reference_cache(),
             )
 
@@ -147,6 +154,7 @@ class BaseGFMZeroShotTask(BaseGFMTask):
                 'variant_repr': variant_repr_np,
                 'reference_repr': reference_repr_np,
                 'labels': labels,
+                'compact_embeddings': compact and position is not None,
             }
 
             # Update common metrics using their specified argument keys

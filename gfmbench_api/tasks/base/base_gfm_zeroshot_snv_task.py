@@ -90,6 +90,11 @@ class BaseGFMZeroShotSNVTask(BaseGFMZeroShotTask):
         reference_snv_output_pos, = self._safe_model_call(
             model, 'sequence_pos_to_prob_pos', reference_sequences, snv_input_pos, num_outputs=1
         )
+        if outputs.get('compact_embeddings'):
+            # Compact embeddings contain only the requested position. Preserve
+            # invalid indices so the existing metric still skips those rows.
+            variant_snv_output_pos = np.where(np.asarray(variant_snv_output_pos) >= 0, 0, -1)
+            reference_snv_output_pos = np.where(np.asarray(reference_snv_output_pos) >= 0, 0, -1)
 
         # Get masked token probabilities for variant and reference nucleotides
         variant_letters = [seq[snv_input_pos] for seq in variant_sequences]
